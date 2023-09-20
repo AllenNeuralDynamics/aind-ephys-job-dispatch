@@ -1,5 +1,5 @@
-# aind-capsule-ephys-job-dispatch
-## Dispatch jobs for AIND pipeline
+# Dispatch jobs for AIND ephys pipeline
+## aind-capsule-ephys-job-dispatch
 
 This simple capsule is designed to dispatch jobs for the AIND pipeline. 
 
