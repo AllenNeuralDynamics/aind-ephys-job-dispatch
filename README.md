@@ -1,17 +1,29 @@
 # Dispatch jobs for AIND ephys pipeline
 ## aind-capsule-ephys-job-dispatch
 
+
+### Description
+
 This simple capsule is designed to dispatch jobs for the AIND pipeline. 
 
 It assumes the data is stored in the `data/` directory, and creates as many JSON files 
-as the number of jobs that can be run in parallel. Each job consists of a recording with spiking activity that needs spike sorting. 
+as the number of jobs that can be run in parallel. Each job consists of a recording with spiking activity that needs spike sorting.
 
-The `data/` folder includes a single recorded session (e.g., "ecephys_664438_2023-04-12_14-59-51") with the `ecephys` (uncompressed Open Ephys output) or the `ecepys_compressed` and `ecephys_clipped` fodlers (processed with [aind-data-transfer](https://github.com/AllenNeuralDynamics/aind-data-transfer)). 
+### Inputs
+
+The `data/` folder must include a single recorded session (e.g., "ecephys_664438_2023-04-12_14-59-51") with the `ecephys` (uncompressed Open Ephys output) or the `ecepys_compressed` and `ecephys_clipped` folders (processed with [aind-data-transfer](https://github.com/AllenNeuralDynamics/aind-data-transfer)). 
 The ecephys data can have multiple experiments (or blocks), each with multiple streams (probes) and continuous recordings (segments).
-
 Different recordings can be concatenated together to form a single recording (and spike sorted together) or treated as separate recordings (and spike sorted separately).
-The latter behavior is default (splitting), but one can change it by passing a `true` argument when running the `code/run` script (`>>> ./code/run true`). 
 
+
+### Parameters
+
+The `code/run` script takes 1 argument:
+
+- `concat`: `false` (default) | `true`. If `true`, the capsule will concatenate all recordings together. If `false`, each recording will be spike sorted separately.
+
+
+### Output
 
 The output of this capsule is a list of JSON files in the `results/` folder, containing the parameters for a spike sorting job. 
 
