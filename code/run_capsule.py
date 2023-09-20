@@ -94,6 +94,7 @@ if __name__ == "__main__":
                         else:
                             recording_name = f"{exp_stream_name}_recording{i_r + 1}"
                             job_dict["segment_index"] = i_r
+                        print(f"\t{recording_name}")
                         job_dict["recording_name"] = recording_name
                         experiments_dict_list.append(job_dict)
 
