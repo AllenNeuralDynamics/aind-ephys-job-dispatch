@@ -1,5 +1,5 @@
 # Dispatch jobs for AIND ephys pipeline
-## aind-capsule-ephys-job-dispatch
+## aind-ephys-job-dispatch
 
 
 ### Description
