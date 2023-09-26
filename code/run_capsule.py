@@ -35,6 +35,7 @@ if __name__ == "__main__":
 
     # find ecephys sessions to process
     ecephys_sessions = [p for p in data_folder.iterdir() if "ecephys" in p.name.lower()]
+    print(ecephys_sessions)
 
     # not needed, we can parallelize
     # assert len(ecephys_sessions) == 1, f"Attach one session at a time {ecephys_sessions}"
@@ -42,15 +43,19 @@ if __name__ == "__main__":
     for session in ecephys_sessions:
         session_name = session.name
 
-        ecephys_full_folder = session / "ecephys"
-        ecephys_compressed_folder = session / "ecephys_compressed"
+        ecephys_base_folder = session / "ecephys"
         compressed = False
-        if ecephys_compressed_folder.is_dir():
+        if (ecephys_base_folder / "ecephys_compressed").is_dir():
             compressed = True
+            ecephys_compressed_folder = ecephys_base_folder / "ecephys_compressed"
+            ecephys_folder = ecephys_base_folder / "ecephys_clipped"
+        elif (session / "ecephys_compressed").is_dir():
+            ecephys_compressed_folder = session / "ecephys_compressed"
             ecephys_folder = session / "ecephys_clipped"
         else:
             ecephys_folder = ecephys_full_folder
 
+        print(session, ecephys_folder)
         # get blocks/experiments and streams info
         num_blocks = se.get_neo_num_blocks("openephys", ecephys_folder)
         stream_names, stream_ids = se.get_neo_streams("openephys", ecephys_folder)
