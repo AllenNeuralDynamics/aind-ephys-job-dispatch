@@ -46,6 +46,9 @@ if __name__ == "__main__":
     experiments_dict_list = []
     for session in ecephys_sessions:
         session_name = session.name
+        # in pipeline mode, we can't retrieve the session name from the folder name.
+        if session_name == "data":
+            session_name = None
 
         ecephys_base_folder = session / "ecephys"
         compressed = False
