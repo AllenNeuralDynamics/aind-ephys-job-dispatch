@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     # find ecephys sessions to process
     ecephys_sessions = [p for p in data_folder.iterdir() if "ecephys" in p.name.lower()]
-    print(ecephys_sessions)
+    print(f"Ecephys sessions: {ecephys_sessions}")
 
     # not needed, we can parallelize
     # assert len(ecephys_sessions) == 1, f"Attach one session at a time {ecephys_sessions}"
@@ -55,7 +55,7 @@ if __name__ == "__main__":
         else:
             ecephys_folder = ecephys_full_folder
 
-        print(session, ecephys_folder)
+        print(f"Session: {session_name} - Open Ephys folder: {ecephys_folder}")
         # get blocks/experiments and streams info
         num_blocks = se.get_neo_num_blocks("openephys", ecephys_folder)
         stream_names, stream_ids = se.get_neo_streams("openephys", ecephys_folder)
@@ -67,7 +67,7 @@ if __name__ == "__main__":
         exp_ids = list(experiments.keys())
         experiment_names = [experiments[exp_id]["name"] for exp_id in sorted(exp_ids)]
 
-        print(f"Session: {session_name} - Num. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
+        print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
 
         for block_index in range(num_blocks):
             for stream_name in stream_names:
@@ -99,7 +99,7 @@ if __name__ == "__main__":
                         else:
                             recording_name = f"{exp_stream_name}_recording{i_r + 1}"
                             job_dict["segment_index"] = i_r
-                        print(f"\t{recording_name}")
+                        print(f"\t\t{recording_name}")
                         job_dict["recording_name"] = recording_name
                         experiments_dict_list.append(job_dict)
 
