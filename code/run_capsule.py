@@ -34,7 +34,11 @@ if __name__ == "__main__":
         CONCAT = False
 
     # find ecephys sessions to process
-    ecephys_sessions = [p for p in data_folder.iterdir() if "ecephys" in p.name.lower()]
+    # for pipelines, the session data are mapped directly to the data folder
+    if (data_folder / "ecephys").is_dir() or (data_folder / "ecephys_compressed").is_dir():
+        ecephys_sessions = [data_folder]
+    else:
+        ecephys_sessions = [p for p in data_folder.iterdir() if "ecephys" in p.name.lower()]
     print(f"Ecephys sessions: {ecephys_sessions}")
 
     # not needed, we can parallelize
@@ -46,13 +50,16 @@ if __name__ == "__main__":
         ecephys_base_folder = session / "ecephys"
         compressed = False
         if (ecephys_base_folder / "ecephys_compressed").is_dir():
+            # most recent folder organization
             compressed = True
             ecephys_compressed_folder = ecephys_base_folder / "ecephys_compressed"
             ecephys_folder = ecephys_base_folder / "ecephys_clipped"
         elif (session / "ecephys_compressed").is_dir():
+            compressed = True
             ecephys_compressed_folder = session / "ecephys_compressed"
             ecephys_folder = session / "ecephys_clipped"
         else:
+            # uncompressed data
             ecephys_folder = ecephys_base_folder
 
         print(f"Session: {session_name} - Open Ephys folder: {ecephys_folder}")
