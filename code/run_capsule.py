@@ -53,7 +53,7 @@ if __name__ == "__main__":
             ecephys_compressed_folder = session / "ecephys_compressed"
             ecephys_folder = session / "ecephys_clipped"
         else:
-            ecephys_folder = ecephys_full_folder
+            ecephys_folder = ecephys_base_folder
 
         print(f"Session: {session_name} - Open Ephys folder: {ecephys_folder}")
         # get blocks/experiments and streams info
