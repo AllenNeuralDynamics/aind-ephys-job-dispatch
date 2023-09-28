@@ -66,7 +66,7 @@ if __name__ == "__main__":
             # uncompressed data
             ecephys_folder = ecephys_base_folder
 
-        print(f"Session: {session_name} - Session path frm data/: {str(session_folder_path)} - Open Ephys folder: {str(ecephys_folder)}")
+        print(f"Session: {session_name}\n\tSession path from data: {str(session_folder_path)} - Open Ephys folder: {str(ecephys_folder)}")
         # get blocks/experiments and streams info
         num_blocks = se.get_neo_num_blocks("openephys", ecephys_folder)
         stream_names, stream_ids = se.get_neo_streams("openephys", ecephys_folder)
@@ -79,7 +79,7 @@ if __name__ == "__main__":
         experiment_names = [experiments[exp_id]["name"] for exp_id in sorted(exp_ids)]
 
         print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
-
+        print("\tRecording to be processed in parallel:")
         for block_index in range(num_blocks):
             for stream_name in stream_names:
                 # skip NIDAQ and NP1-LFP streams
@@ -111,7 +111,8 @@ if __name__ == "__main__":
                         else:
                             recording_name = f"{exp_stream_name}_recording{i_r + 1}"
                             job_dict["segment_index"] = i_r
-                        print(f"\t\t{recording_name}")
+                        total_duration = np.round(recording.get_total_duration(), 2)
+                        print(f"\t\t{recording_name} - Duration: {total_duration} s")
                         job_dict["recording_name"] = recording_name
                         experiments_dict_list.append(job_dict)
 
