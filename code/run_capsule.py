@@ -34,21 +34,22 @@ if __name__ == "__main__":
         CONCAT = False
 
     # find ecephys sessions to process
-    # for pipelines, the session data are mapped directly to the data folder
-    if (data_folder / "ecephys").is_dir() or (data_folder / "ecephys_compressed").is_dir():
+    # for pipelines, the session data should to be mapped to the "data/ecephys_session" folder
+    if (data_folder / "ecephys").is_dir() or (data_folder / "ecephys_compressed").is_dir() or (data_folder / "ecephys_clipped").is_dir():
         ecephys_sessions = [data_folder]
     else:
         ecephys_sessions = [p for p in data_folder.iterdir() if "ecephys" in p.name.lower()]
-    print(f"Ecephys sessions: {ecephys_sessions}")
+    print(f"Ecephys folders: {[str(s) for s in ecephys_sessions]}")
 
     # not needed, we can parallelize
     # assert len(ecephys_sessions) == 1, f"Attach one session at a time {ecephys_sessions}"
     experiments_dict_list = []
     for session in ecephys_sessions:
-        session_name = session.name
-        # in pipeline mode, we can't retrieve the session name from the folder name.
-        if session_name == "data":
-            session_name = None
+        session_name = None
+        if (session / "data_description.json").is_file():
+            data_description = json.load(open(session / "data_description.json", "r"))
+            session_name = data_description["name"]
+        session_folder_path = session.relative_to(data_folder)
 
         ecephys_base_folder = session / "ecephys"
         compressed = False
@@ -65,7 +66,7 @@ if __name__ == "__main__":
             # uncompressed data
             ecephys_folder = ecephys_base_folder
 
-        print(f"Session: {session_name} - Open Ephys folder: {ecephys_folder}")
+        print(f"Session: {session_name} - Session path frm data/: {str(session_folder_path)} - Open Ephys folder: {str(ecephys_folder)}")
         # get blocks/experiments and streams info
         num_blocks = se.get_neo_num_blocks("openephys", ecephys_folder)
         stream_names, stream_ids = se.get_neo_streams("openephys", ecephys_folder)
@@ -101,7 +102,8 @@ if __name__ == "__main__":
                             experiment_name=experiment_name,
                             block_index=block_index,
                             stream_name=stream_name,
-                            session=session_name
+                            session_name=session_name,
+                            session_folder_path=str(session_folder_path)
                         )
                         if CONCAT:
                             recording_name = f"{exp_stream_name}_recording"

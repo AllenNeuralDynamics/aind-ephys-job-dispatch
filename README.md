@@ -32,6 +32,7 @@ Each JSON file contains the following fields:
 - `experiment_name`: the Open Ephys experiment name (e.g., "experiment1")
 - `block_index`: the corresponding NEO block index (e.g., 0)
 - `stream_name`: the NEO/SpikeInterface stream name (e.g., "Record Node 101#Neuropix-PXI-100.probeA-AP")
-- `session`: the session name (e.g., "ecephys_664438_2023-04-12_14-59-51")
+- `session_name`: the session name (e.g., "ecephys_664438_2023-04-12_14-59-51")
+- `session_folder_path`: the session folder path relative to data
 - `segment_index`: the segment index (e.g., 0)
 - `recording_name`: the recording name, which will correspond to output folders downstreams (e.g, "experiment1_Record Node 101#Neuropix-PXI-100.probeA-AP_recording1")
