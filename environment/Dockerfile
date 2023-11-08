@@ -8,7 +8,7 @@ ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
-    wavpack-numcodecs==0.1.3
+    wavpack-numcodecs==0.1.5
 
 COPY postInstall /
 RUN /postInstall
