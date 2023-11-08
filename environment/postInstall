@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -e
 
-pip install -U --no-cache-dir spikeinterface[full]==0.97.1
+pip install -U --no-cache-dir spikeinterface[full]==0.99.0
