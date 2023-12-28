@@ -8,5 +8,5 @@ ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
-    spikeinterface[full]==0.99.0 \
+    spikeinterface[full]==0.99.1 \
     wavpack-numcodecs==0.1.5
