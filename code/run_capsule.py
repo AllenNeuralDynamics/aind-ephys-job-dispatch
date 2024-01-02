@@ -4,7 +4,7 @@ warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # GENERAL IMPORTS
-import os
+import argparse
 import numpy as np
 from pathlib import Path
 import shutil
@@ -24,14 +24,21 @@ results_folder = Path("../results")
 scratch_folder = Path("../scratch")
 
 
+parser = argparse.ArgumentParser(description="Dispatch jobs for AIND ephys pipeline")
+
+concat_group = parser.add_mutually_exclusive_group()
+concat_help = "Whether to concatenate recordings (segments) or not. Default: False"
+concat_group.add_argument("--concatenate", action="store_true", help=concat_help)
+concat_group.add_argument("static_concatenate", nargs="?", default="false", help=concat_help)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) == 2:
-        if sys.argv[1] == "true":
-            CONCAT = True
-        else:
-            CONCAT = False
-    else:
-        CONCAT = False
+    args = parser.parse_args()
+
+    CONCAT = args.concatenate or args.static_concatenate.lower() == "true"
+
+    print(f"Running job dispatcher with the following parameters:")
+    print(f"\tCONCATENATE RECORDINGS: {CONCAT}")
 
     # find ecephys sessions to process
     # for pipelines, the session data should to be mapped to the "data/ecephys_session" folder
