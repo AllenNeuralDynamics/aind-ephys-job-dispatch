@@ -32,7 +32,7 @@ concat_group.add_argument("static_concatenate", nargs="?", default="false", help
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    CONCAT = args.concatenate or args.static_concatenate.lower() == "true"
+    CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
 
     print(f"Running job dispatcher with the following parameters:")
     print(f"\tCONCATENATE RECORDINGS: {CONCAT}")
