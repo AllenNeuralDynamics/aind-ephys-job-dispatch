@@ -7,11 +7,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 import argparse
 import numpy as np
 from pathlib import Path
-import shutil
 import json
-import sys
-import time
-from datetime import datetime, timedelta
 
 
 # SPIKEINTERFACE
@@ -24,6 +20,7 @@ results_folder = Path("../results")
 scratch_folder = Path("../scratch")
 
 
+# Define argument parser
 parser = argparse.ArgumentParser(description="Dispatch jobs for AIND ephys pipeline")
 
 concat_group = parser.add_mutually_exclusive_group()
