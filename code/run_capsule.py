@@ -1,16 +1,13 @@
 import warnings
+
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # GENERAL IMPORTS
-import os
+import argparse
 import numpy as np
 from pathlib import Path
-import shutil
 import json
-import sys
-import time
-from datetime import datetime, timedelta
 
 
 # SPIKEINTERFACE
@@ -23,23 +20,33 @@ results_folder = Path("../results")
 scratch_folder = Path("../scratch")
 
 
-if __name__ == "__main__":
+# Define argument parser
+parser = argparse.ArgumentParser(description="Dispatch jobs for AIND ephys pipeline")
 
-    if len(sys.argv) == 2:
-        if sys.argv[1] == "true":
-            CONCAT = True
-        else:
-            CONCAT = False
-    else:
-        CONCAT = False
+concat_group = parser.add_mutually_exclusive_group()
+concat_help = "Whether to concatenate recordings (segments) or not. Default: False"
+concat_group.add_argument("--concatenate", action="store_true", help=concat_help)
+concat_group.add_argument("static_concatenate", nargs="?", default="false", help=concat_help)
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+
+    CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
+
+    print(f"Running job dispatcher with the following parameters:")
+    print(f"\tCONCATENATE RECORDINGS: {CONCAT}")
 
     # find ecephys sessions to process
     # for pipelines, the session data should to be mapped to the "data/ecephys_session" folder
-    if (data_folder / "ecephys").is_dir() or (data_folder / "ecephys_compressed").is_dir() or (data_folder / "ecephys_clipped").is_dir():
+    if (
+        (data_folder / "ecephys").is_dir()
+        or (data_folder / "ecephys_compressed").is_dir()
+        or (data_folder / "ecephys_clipped").is_dir()
+    ):
         ecephys_sessions = [data_folder]
     else:
         ecephys_sessions = [p for p in data_folder.iterdir() if "ecephys" in p.name.lower()]
-    print(f"Ecephys folders: {[str(s) for s in ecephys_sessions]}")
 
     # not needed, we can parallelize
     # assert len(ecephys_sessions) == 1, f"Attach one session at a time {ecephys_sessions}"
@@ -66,7 +73,9 @@ if __name__ == "__main__":
             # uncompressed data
             ecephys_folder = ecephys_base_folder
 
-        print(f"Session: {session_name}\n\tSession path from data: {str(session_folder_path)} - Open Ephys folder: {str(ecephys_folder)}")
+        print(
+            f"Session: {session_name}\n\tSession path from data: {str(session_folder_path)} - Open Ephys folder: {str(ecephys_folder)}"
+        )
         # get blocks/experiments and streams info
         num_blocks = se.get_neo_num_blocks("openephys", ecephys_folder)
         stream_names, stream_ids = se.get_neo_streams("openephys", ecephys_folder)
@@ -103,7 +112,7 @@ if __name__ == "__main__":
                             block_index=block_index,
                             stream_name=stream_name,
                             session_name=session_name,
-                            session_folder_path=str(session_folder_path)
+                            session_folder_path=str(session_folder_path),
                         )
                         if CONCAT:
                             recording_name = f"{exp_stream_name}_recording"
@@ -120,4 +129,3 @@ if __name__ == "__main__":
         with open(results_folder / f"job_{i}.json", "w") as f:
             json.dump(experiment_dict, f, indent=4)
     print(f"Generated {len(experiments_dict_list)} job config files")
-
