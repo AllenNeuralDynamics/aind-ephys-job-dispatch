@@ -47,7 +47,6 @@ if __name__ == "__main__":
         ecephys_sessions = [data_folder]
     else:
         ecephys_sessions = [p for p in data_folder.iterdir() if "ecephys" in p.name.lower()]
-    print(f"Ecephys folders: {[str(s) for s in ecephys_sessions]}")
 
     # not needed, we can parallelize
     # assert len(ecephys_sessions) == 1, f"Attach one session at a time {ecephys_sessions}"
