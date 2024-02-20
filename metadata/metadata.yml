@@ -4,6 +4,8 @@ description: |-
   This capsule is designed to dispatch jobs for the AIND pipeline.
 
   It assumes the data is stored in the data/ directory, and creates as many JSON files as the number of jobs that can be run in parallel. Each job consists of a recording with spiking activity that needs spike sorting.
+tags:
+- ecephys
 authors:
 - name: AIND
 - name: Alessio Buccino
