@@ -123,9 +123,6 @@ if __name__ == "__main__":
                         HAS_CHANNEL_GROUPS = len(np.unique(recording.get_channel_groups())) > 1
 
                         for i_r, recording in enumerate(recordings):
-                            job_dict = dict(
-                                session_name=session_name,
-                            )
                             if CONCAT:
                                 recording_name = f"{exp_stream_name}_recording"
                             else:
@@ -137,19 +134,25 @@ if __name__ == "__main__":
                                 for group_name, recording_group in recording.split_by("group").items():
                                     recording_name_group = f"{recording_name}_group{group_name}"
                                     print(f"\t\t{recording_name_group} - Duration: {total_duration} s - Num. channels: {recording_group.get_num_channels()}")
-                                    job_dict["recording_name"] = recording_name_group
-                                    job_dict["recording_dict"] = recording_group.to_dict(
-                                        recursive=True,
-                                        relative_to=data_folder
+                                    job_dict = dict(
+                                        session_name=session_name,
+                                        recording_name=str(recording_name_group),
+                                        recording_dict=recording_group.to_dict(
+                                            recursive=True,
+                                            relative_to=data_folder
+                                        )
                                     )
                                     job_dict_list.append(job_dict)
                             else:
                                 print(f"\t\t{recording_name} - Duration: {total_duration} s - Num. channels: {recording.get_num_channels()}")
 
-                                job_dict["recording_name"] = recording_name
-                                job_dict["recording_dict"] = recording.to_dict(
-                                    recursive=True,
-                                    relative_to=data_folder
+                                job_dict = dict(
+                                    session_name=session_name,
+                                    recording_name=str(recording_name),
+                                    recording_dict=recording_group.to_dict(
+                                        recursive=True,
+                                        relative_to=data_folder
+                                    )
                                 )
                                 job_dict_list.append(job_dict)
     elif INPUT == "spikeglx":
