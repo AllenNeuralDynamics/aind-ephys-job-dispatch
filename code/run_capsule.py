@@ -135,9 +135,9 @@ if __name__ == "__main__":
 
                             if HAS_CHANNEL_GROUPS:
                                 for group_name, recording_group in recording.split_by("group").items():
-                                    recording_name += f"_group{group_name}"
-                                    print(f"\t\t{recording_name} - Duration: {total_duration} s - Num. channels: {recording_group.get_num_channels()}")
-                                    job_dict["recording_name"] = recording_name
+                                    recording_name_group = f"{recording_name}_group{group_name}"
+                                    print(f"\t\t{recording_name_group} - Duration: {total_duration} s - Num. channels: {recording_group.get_num_channels()}")
+                                    job_dict["recording_name"] = recording_name_group
                                     job_dict["recording_dict"] = recording_group.to_dict(
                                         recursive=True,
                                         relative_to=data_folder
