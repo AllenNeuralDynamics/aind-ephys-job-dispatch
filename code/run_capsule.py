@@ -46,6 +46,7 @@ if __name__ == "__main__":
     print(f"\tCONCATENATE RECORDINGS: {CONCAT}")
     print(f"\tINPUT: {INPUT}")
 
+    job_dict_list = []
     if INPUT == "aind":
         print("Parsing AIND input folder")
         # find ecephys sessions to process
@@ -61,7 +62,6 @@ if __name__ == "__main__":
 
         # not needed, we can parallelize
         # assert len(ecephys_sessions) == 1, f"Attach one session at a time {ecephys_sessions}"
-        job_dict_list = []
         for session in ecephys_sessions:
             session_name = None
             if (session / "data_description.json").is_file():
@@ -161,50 +161,58 @@ if __name__ == "__main__":
         assert len(spikeglx_folders) == 1, "Attach one SpikeGLX folder at a time"
         spikeglx_folder = spikeglx_folders[0]
         session_name = spikeglx_folder.name
-        num_blocks = se.get_neo_num_blocks("spikeglx", spikeglx_folder)
         stream_names, stream_ids = se.get_neo_streams("spikeglx", spikeglx_folder)
 
-        for block_index in range(num_blocks):
-            for stream_name in stream_names:
-                if "nidq" not in stream_name and "lf" not in stream_name:
-                    recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name, block_index=block_index)
+        # spikeglx has only one block
+        num_blocks = 1
+        block_index = 0
+
+        print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
+        print("\tRecording to be processed in parallel:")
+        for stream_name in stream_names:
+            if "nidq" not in stream_name and "lf" not in stream_name:
+                recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name, block_index=block_index)
+                if CONCAT:
+                    recordings = [recording]
+                else:
+                    recordings = si.split_recording(recording)
+
+                HAS_CHANNEL_GROUPS = len(np.unique(recording.get_channel_groups())) > 1
+
+                for i_r, recording in enumerate(recordings):
+
                     if CONCAT:
-                        recordings = [recording]
+                        recording_name = f"block{block_index}_{stream_name}_recording"
                     else:
-                        recordings = si.split_recording(recording)
+                        recording_name = f"block{block_index}_{stream_name}_recording{i_r + 1}"
 
-                    HAS_CHANNEL_GROUPS = len(np.unique(recording.get_channel_groups())) > 1
+                    total_duration = np.round(recording.get_total_duration(), 2)
 
-                    for i_r, recording in enumerate(recordings_segments):
-                        job_dict = dict(
-                            session_name=session_name,
-                        )
-                        if CONCAT:
-                            recording_name = f"block{block_index}_{stream_name}_recording"
-                        else:
-                            recording_name = f"block{block_index}_{stream_name}_recording{i_r + 1}"
-
-                        total_duration = np.round(recording.get_total_duration(), 2)
-
-                        if HAS_CHANNEL_GROUPS:
-                            for group_name, recording_group in recording.split_by("group").items():
-                                recording_name += f"_group{group_name}"
-                                print(f"\t\t{recording_name} - Duration: {total_duration} s - Num. channels: {recording_group.get_num_channels()}")
-                                job_dict["recording_name"] = recording_name
-                                job_dict["recording_dict"] = recording_group.to_dict(
+                    if HAS_CHANNEL_GROUPS:
+                        for group_name, recording_group in recording.split_by("group").items():
+                            recording_name_group = f"{recording_name}_group{group_name}"
+                            print(f"\t\t{recording_name_group} - Duration: {total_duration} s - Num. channels: {recording_group.get_num_channels()}")
+                            job_dict = dict(
+                                session_name=session_name,
+                                recording_name=str(recording_name_group),
+                                recording_dict=recording_group.to_dict(
                                     recursive=True,
                                     relative_to=data_folder
                                 )
-                                job_dict_list.append(job_dict)
-                        else:
-                            print(f"\t\t{recording_name} - Duration: {total_duration} s - Num. channels: {recording.get_num_channels()}")
+                            )
+                            job_dict_list.append(job_dict)
+                    else:
+                        print(f"\t\t{recording_name} - Duration: {total_duration} s - Num. channels: {recording.get_num_channels()}")
 
-                            job_dict["recording_name"] = recording_name
-                            job_dict["recording_dict"] = recording.to_dict(
+                        job_dict = dict(
+                            session_name=session_name,
+                            recording_name=str(recording_name),
+                            recording_dict=recording.to_dict(
                                 recursive=True,
                                 relative_to=data_folder
                             )
-                            job_dict_list.append(job_dict)
+                        )
+                        job_dict_list.append(job_dict)
     elif INPUT == "nwb":
         raise NotImplementedError
 
