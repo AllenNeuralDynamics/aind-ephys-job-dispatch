@@ -149,7 +149,7 @@ if __name__ == "__main__":
                                 job_dict = dict(
                                     session_name=session_name,
                                     recording_name=str(recording_name),
-                                    recording_dict=recording_group.to_dict(
+                                    recording_dict=recording.to_dict(
                                         recursive=True,
                                         relative_to=data_folder
                                     )
