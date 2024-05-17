@@ -171,7 +171,7 @@ if __name__ == "__main__":
         print("\tRecording to be processed in parallel:")
         for stream_name in stream_names:
             if "nidq" not in stream_name and "lf" not in stream_name:
-                recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name, block_index=block_index)
+                recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name)
                 if CONCAT:
                     recordings = [recording]
                 else:
