@@ -18,9 +18,10 @@ Different recordings can be concatenated together to form a single recording (an
 
 ### Parameters
 
-The `code/run` script takes 1 argument:
+The `code/run` script takes 2 arguments:
 
-- `concat`: `false` (default) | `true`. If `true`, the capsule will concatenate all recordings together. If `false`, each recording will be spike sorted separately.
+- `--concatenate`: `false` (default) | `true`. If `true`, the capsule will concatenate all recordings together. If `false`, each recording will be spike sorted separately.
+- `--input`: `aind` | `spikeglx` | `nwb`
 
 
 ### Output
@@ -29,10 +30,6 @@ The output of this capsule is a list of JSON files in the `results/` folder, con
 
 Each JSON file contains the following fields:
 
-- `experiment_name`: the Open Ephys experiment name (e.g., "experiment1")
-- `block_index`: the corresponding NEO block index (e.g., 0)
-- `stream_name`: the NEO/SpikeInterface stream name (e.g., "Record Node 101#Neuropix-PXI-100.probeA-AP")
 - `session_name`: the session name (e.g., "ecephys_664438_2023-04-12_14-59-51")
-- `session_folder_path`: the session folder path relative to data
-- `segment_index`: the segment index (e.g., 0)
 - `recording_name`: the recording name, which will correspond to output folders downstreams (e.g, "experiment1_Record Node 101#Neuropix-PXI-100.probeA-AP_recording1")
+- `recording_dict`: the SpikeInterface dict representation of the recording with paths relative to the `data` folder

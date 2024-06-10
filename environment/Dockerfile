@@ -1,5 +1,6 @@
-# hash:sha256:0ffca0bc96e8f7d25da3c937f1eba4c55cf261350d52feb4d0ee79a062abbf28
-FROM registry.codeocean.allenneuraldynamics.org/codeocean/jupyterlab:3.6.1-miniconda4.12.0-python3.9-ubuntu20.04
+# hash:sha256:b397d6e2a9e61f453f8e14b154fa57756ea353b882837d18f4d8d6ae8f007959
+ARG REGISTRY_HOST
+FROM $REGISTRY_HOST/codeocean/jupyterlab:3.6.1-miniconda4.12.0-python3.9-ubuntu20.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG AWS_ACCESS_KEY_ID
@@ -11,5 +12,7 @@ ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
-    spikeinterface[full]==0.100.0 \
+    hdmf-zarr==0.8.0 \
+    pynwb==2.8.0 \
+    spikeinterface[full]==0.100.7 \
     wavpack-numcodecs==0.1.5
