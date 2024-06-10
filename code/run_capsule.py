@@ -179,9 +179,7 @@ if __name__ == "__main__":
         for segment_index, recording in enumerate(recordings):
             if not CONCAT:
                 recording_name = f"{recording_name}{segment_index + 1}"
-                duration = recording.get_duration(segment_index=segment_index)
-            else:
-                duration = np.round(recording.get_total_duration(), 2)
+            duration = np.round(recording.get_total_duration(), 2)
 
             # if multiple channel groups, process in parallel
             if len(np.unique(recording.get_channel_groups())) > 1:
