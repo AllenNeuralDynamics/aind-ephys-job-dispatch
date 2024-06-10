@@ -19,8 +19,6 @@ from spikeinterface.core.core_tools import SIJsonEncoder
 
 data_folder = Path("../data")
 results_folder = Path("../results")
-scratch_folder = Path("../scratch")
-
 
 # Define argument parser
 parser = argparse.ArgumentParser(description="Dispatch jobs for AIND ephys pipeline")
@@ -146,9 +144,9 @@ if __name__ == "__main__":
         # TODO: use NWBRecordingExtractor.fetch_available_electrical_series_paths with spikeinterface==0.101.0
         from spikeinterface.extractors.nwbextractors import _get_backend_from_local_file, _find_neurodata_type_from_backend, read_file_from_backend
 
-        backend = _get_backend_from_local_file(file_path)
+        backend = _get_backend_from_local_file(nwb_file)
         file_handle = read_file_from_backend(
-            file_path=file_path,
+            file_path=nwb_file,
         )
         electrical_series_paths = _find_neurodata_type_from_backend(
             file_handle,
@@ -157,10 +155,11 @@ if __name__ == "__main__":
         )
 
         print(f"\tSession name: {session_name}")
-        print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electical_series_paths)}")
-        for electrical_series_path in electical_series_paths:
+        print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electrical_series_paths)}")
+        for electrical_series_path in electrical_series_paths:
             # only use paths in acquisition
-            if "acquisition" in electical_series_paths:
+            if "acquisition" in electrical_series_path:
+                stream_name = electrical_series_path.replace("/", "-")
                 recording = se.read_nwb_recording(nwb_file, electrical_series_path=electrical_series_path)
                 recording_name = f"block{block_index}_{stream_name}_recording"
                 recording_dict[(session_name, recording_name)] = recording
@@ -188,7 +187,7 @@ if __name__ == "__main__":
             if len(np.unique(recording.get_channel_groups())) > 1:
                 for group_name, recording_group in recording.split_by("group").items():
                     recording_name_group = f"{recording_name}_group{group_name}"
-                    print(f"\t\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}")
+                    print(f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}")
                     job_dict = dict(
                         session_name=session_name,
                         recording_name=str(recording_name_group),
@@ -199,7 +198,7 @@ if __name__ == "__main__":
                     )
                     job_dict_list.append(job_dict)
             else:
-                print(f"\t\t{recording_name} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}")
+                print(f"\t{recording_name} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}")
                 job_dict = dict(
                     session_name=session_name,
                     recording_name=str(recording_name),
@@ -209,6 +208,9 @@ if __name__ == "__main__":
                     )
                 )
             job_dict_list.append(job_dict)
+
+    if not results_folder.is_dir():
+        results_folder.mkdir(parents=True)
 
     for i, job_dict in enumerate(job_dict_list):
         with open(results_folder / f"job_{i}.json", "w") as f:
