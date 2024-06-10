@@ -142,15 +142,28 @@ if __name__ == "__main__":
         num_blocks = 1
         block_index = 0
 
-        # get available paths in "acquisition"
-        electical_series_paths = "..."
+        # get available electrical_series_path options
+        # TODO: use NWBRecordingExtractor.fetch_available_electrical_series_paths with spikeinterface==0.101.0
+        from spikeinterface.extractors.nwbextractors import _get_backend_from_local_file, _find_neurodata_type_from_backend, read_file_from_backend
+
+        backend = _get_backend_from_local_file(file_path)
+        file_handle = read_file_from_backend(
+            file_path=file_path,
+        )
+        electrical_series_paths = _find_neurodata_type_from_backend(
+            file_handle,
+            neurodata_type="ElectricalSeries",
+            backend=backend,
+        )
 
         print(f"\tSession name: {session_name}")
         print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electical_series_paths)}")
         for electrical_series_path in electical_series_paths:
-            recording = se.read_nwb_recording(nwb_file, electrical_series_path=electrical_series_path)
-            recording_name = f"block{block_index}_{stream_name}_recording"
-            recording_dict[(session_name, recording_name)] = recording
+            # only use paths in acquisition
+            if "acquisition" in electical_series_paths:
+                recording = se.read_nwb_recording(nwb_file, electrical_series_path=electrical_series_path)
+                recording_name = f"block{block_index}_{stream_name}_recording"
+                recording_dict[(session_name, recording_name)] = recording
 
     # populate job dict list
     job_dict_list = []
