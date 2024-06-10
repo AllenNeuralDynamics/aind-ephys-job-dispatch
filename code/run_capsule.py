@@ -178,13 +178,15 @@ if __name__ == "__main__":
 
         for segment_index, recording in enumerate(recordings):
             if not CONCAT:
-                recording_name = f"{recording_name}{segment_index + 1}"
+                recording_name_segment = f"{recording_name}{segment_index + 1}"
+            else:
+                recording_name_segment = f"{recording_name}"
             duration = np.round(recording.get_total_duration(), 2)
 
             # if multiple channel groups, process in parallel
             if len(np.unique(recording.get_channel_groups())) > 1:
                 for group_name, recording_group in recording.split_by("group").items():
-                    recording_name_group = f"{recording_name}_group{group_name}"
+                    recording_name_group = f"{recording_name_segment}_group{group_name}"
                     print(f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}")
                     job_dict = dict(
                         session_name=session_name,
@@ -196,7 +198,7 @@ if __name__ == "__main__":
                     )
                     job_dict_list.append(job_dict)
             else:
-                print(f"\t{recording_name} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}")
+                print(f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}")
                 job_dict = dict(
                     session_name=session_name,
                     recording_name=str(recording_name),
