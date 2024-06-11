@@ -52,6 +52,8 @@ if __name__ == "__main__":
     else:
         ecephys_session_folder = None
     print(f"Data folder: {data_folder} - Ecphys session folder: {ecephys_session_folder}")
+    all_files_in_folder = [p for p in ecephys_session_folder.iterdir()]
+    print(f"Files in folder: {all_files_in_folder}")
 
     if INPUT == "aind":
         # find ecephys sessions to process
