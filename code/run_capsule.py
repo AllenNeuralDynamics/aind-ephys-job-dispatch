@@ -131,8 +131,10 @@ if __name__ == "__main__":
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
+        all_files = [p for p in data_folder.iterdir()]
         nwb_files = [p for p in data_folder.iterdir() if "nwb" in p.name]
         print(data_folder)
+        print(all_files)
         print(nwb_files)
         assert len(nwb_files) == 1, "Attach one NWB file at a time"
         nwb_file = nwb_files[0]
