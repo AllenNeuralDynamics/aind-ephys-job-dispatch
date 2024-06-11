@@ -46,17 +46,23 @@ if __name__ == "__main__":
 
     print(f"Parsing {INPUT} input folder")
     recording_dict = {}
-    all_files = [p for p in data_folder.iterdir()]
-    print("DATA FOLDER:", data_folder)
-    all_files = [p for p in data_folder.iterdir()]
-    print(f"All files in data folder: {all_files}")
-    
+    ecephys_session_folders = [p for p in data_folder.iterdir() if "ecephys_session" == p.name]
+    if len(ecephys_session_folders) == 1:
+        ecephys_session_folder = ecephys_session_folders[0]
+    else:
+        ecephys_session_folder = None
+
     if INPUT == "aind":
         # find ecephys sessions to process
         #
         # - for pipelines, the session data should to be mapped to the "data/ecephys_session" folder
         # - for standalone capsule runs, the data is in "data/ecephys_{session_name}"
-        ecephys_sessions = [p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()]
+        if ecephys_session_folder is not None:
+            ecephys_sessions = [ecephys_session_folder]
+        else:
+            ecephys_sessions = [
+                p for p in ecephys_session_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
+            ]
 
         for session_folder in ecephys_sessions:
             session_name = None
@@ -116,7 +122,7 @@ if __name__ == "__main__":
 
     elif INPUT == "spikeglx":
         # get blocks/experiments and streams info
-        spikeglx_folders = [p for p in data_folder.iterdir() if p.is_dir()]
+        spikeglx_folders = [p for p in ecephys_session_folder.iterdir() if p.is_dir()]
         assert len(spikeglx_folders) == 1, "Attach one SpikeGLX folder at a time"
         print(spikeglx_folders)
         spikeglx_folder = spikeglx_folders[0]
@@ -137,7 +143,7 @@ if __name__ == "__main__":
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
-        nwb_files = [p for p in data_folder.iterdir() if "nwb" in p.name]
+        nwb_files = [p for p in ecephys_session_folder.iterdir() if "nwb" in p.name]
         print(nwb_files)
         assert len(nwb_files) == 1, "Attach one NWB file at a time"
         nwb_file = nwb_files[0]
