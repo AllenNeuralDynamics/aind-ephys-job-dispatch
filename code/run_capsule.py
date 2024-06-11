@@ -51,6 +51,7 @@ if __name__ == "__main__":
         ecephys_session_folder = ecephys_session_folders[0]
     else:
         ecephys_session_folder = None
+    print(f"Data folder: {data_folder} - Ecphys session folder: {ecephys_session_folder}")
 
     if INPUT == "aind":
         # find ecephys sessions to process
