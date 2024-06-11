@@ -48,6 +48,8 @@ if __name__ == "__main__":
     recording_dict = {}
     all_files = [p for p in data_folder.iterdir()]
     print("DATA FOLDER:", data_folder)
+    all_files = [p for p in data_folder.iterdir()]
+    print(f"All files in data folder: {all_files}")
     
     if INPUT == "aind":
         # find ecephys sessions to process
@@ -135,7 +137,6 @@ if __name__ == "__main__":
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
-        all_files = [p for p in data_folder.iterdir()]
         nwb_files = [p for p in data_folder.iterdir() if "nwb" in p.name]
         print(nwb_files)
         assert len(nwb_files) == 1, "Attach one NWB file at a time"
