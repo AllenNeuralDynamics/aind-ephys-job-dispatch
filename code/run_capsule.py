@@ -61,7 +61,7 @@ if __name__ == "__main__":
             ecephys_sessions = [ecephys_session_folder]
         else:
             ecephys_sessions = [
-                p for p in ecephys_session_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
+                p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
             ]
 
         for session_folder in ecephys_sessions:
