@@ -201,7 +201,7 @@ if __name__ == "__main__":
                 print(f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}")
                 job_dict = dict(
                     session_name=session_name,
-                    recording_name=str(recording_name),
+                    recording_name=str(recording_name_segment),
                     recording_dict=recording.to_dict(
                         recursive=True,
                         relative_to=data_folder
