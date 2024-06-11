@@ -51,9 +51,6 @@ if __name__ == "__main__":
         ecephys_session_folder = ecephys_session_folders[0]
     else:
         ecephys_session_folder = None
-    print(f"Data folder: {data_folder} - Ecphys session folder: {ecephys_session_folder}")
-    all_files_in_folder = [p for p in ecephys_session_folder.iterdir()]
-    print(f"Files in folder: {all_files_in_folder}")
 
     if INPUT == "aind":
         # find ecephys sessions to process
@@ -127,7 +124,6 @@ if __name__ == "__main__":
         # get blocks/experiments and streams info
         spikeglx_folders = [p for p in ecephys_session_folder.iterdir() if p.is_dir()]
         assert len(spikeglx_folders) == 1, "Attach one SpikeGLX folder at a time"
-        print(spikeglx_folders)
         spikeglx_folder = spikeglx_folders[0]
         session_name = spikeglx_folder.name
         stream_names, stream_ids = se.get_neo_streams("spikeglx", spikeglx_folder)
@@ -147,7 +143,6 @@ if __name__ == "__main__":
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
         nwb_files = [p for p in ecephys_session_folder.iterdir() if "nwb" in p.name]
-        print(nwb_files)
         assert len(nwb_files) == 1, "Attach one NWB file at a time"
         nwb_file = nwb_files[0]
         session_name = nwb_file.name
