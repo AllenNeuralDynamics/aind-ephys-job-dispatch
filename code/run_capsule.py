@@ -207,7 +207,7 @@ if __name__ == "__main__":
                         relative_to=data_folder
                     )
                 )
-            job_dict_list.append(job_dict)
+                job_dict_list.append(job_dict)
 
     if not results_folder.is_dir():
         results_folder.mkdir(parents=True)
