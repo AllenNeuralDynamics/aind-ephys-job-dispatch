@@ -85,8 +85,8 @@ if __name__ == "__main__":
                 print(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
 
             # get blocks/experiments and streams info
-            num_blocks = se.get_neo_num_blocks("openephys", ecephys_openephys_folder)
-            stream_names, stream_ids = se.get_neo_streams("openephys", ecephys_openephys_folder)
+            num_blocks = se.get_neo_num_blocks("openephysbinary", ecephys_openephys_folder)
+            stream_names, stream_ids = se.get_neo_streams("openephysbinary", ecephys_openephys_folder)
 
             # load first stream to map block_indices to experiment_names
             rec_test = se.read_openephys(ecephys_openephys_folder, block_index=0, stream_name=stream_names[0])
