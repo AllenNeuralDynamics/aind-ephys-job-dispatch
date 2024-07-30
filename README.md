@@ -41,3 +41,4 @@ Each JSON file contains the following fields:
 - `session_name`: the session name (e.g., "ecephys_664438_2023-04-12_14-59-51")
 - `recording_name`: the recording name, which will correspond to output folders downstreams (e.g, "experiment1_Record Node 101#Neuropix-PXI-100.probeA-AP_recording1")
 - `recording_dict`: the SpikeInterface dict representation of the recording with paths relative to the `data` folder
+- `recording_lfp_dict`: the SpikeInterface dict representation of the LFP recording associated to the main recording (e.g., the LF stream in case of Neuropixels). If the recording is wideband this field will be set.
