@@ -229,24 +229,22 @@ if __name__ == "__main__":
             if len(np.unique(recording.get_channel_groups())) > 1:
                 for group_name, recording_group in recording.split_by("group").items():
                     recording_name_group = f"{recording_name_segment}_group{group_name}"
-                    print(
-                        f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}"
-                    )
                     job_dict = dict(
                         session_name=session_name,
                         recording_name=str(recording_name_group),
                         recording_dict=recording_group.to_dict(recursive=True, relative_to=data_folder),
                     )
+                    rec_str = f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}"
                     if HAS_LFP:
                         recording_lfp_group = recordings_lfp[segment_index].split_by("group")[group_name]
                         job_dict["recording_lfp_dict"] = recording_lfp_group.to_dict(
                             recursive=True, relative_to=data_folder
                         )
+                        rec_str += f" (with LFP stream)"
+                    print(rec_str)
                     job_dict_list.append(job_dict)
             else:
-                print(
-                    f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}"
-                )
+                rec_str = f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}"
                 job_dict = dict(
                     session_name=session_name,
                     recording_name=str(recording_name_segment),
@@ -257,6 +255,8 @@ if __name__ == "__main__":
                     job_dict["recording_lfp_dict"] = recording_lfp_segment.to_dict(
                         recursive=True, relative_to=data_folder
                     )
+                    rec_str += f" (with LFP stream)"
+                print(rec_str)
                 job_dict_list.append(job_dict)
 
     if not results_folder.is_dir():
