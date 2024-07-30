@@ -87,7 +87,7 @@ if __name__ == "__main__":
             if compressed:
                 print(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
 
-            if parse(si.__version__) > parse("0.100"):
+            if parse(si.__version__) >= parse("0.101.0"):
                 open_ephys_name = "openephysbinary"
             else:
                 open_ephys_name = "openephys"
