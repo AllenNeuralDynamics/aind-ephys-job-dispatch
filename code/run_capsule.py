@@ -20,6 +20,7 @@ from spikeinterface.core.core_tools import SIJsonEncoder
 data_folder = Path("../data")
 results_folder = Path("../results")
 
+
 # Define argument parser
 parser = argparse.ArgumentParser(description="Dispatch jobs for AIND ephys pipeline")
 
