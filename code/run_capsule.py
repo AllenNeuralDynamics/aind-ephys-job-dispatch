@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 from pathlib import Path
 import json
+from packaging.version import parse
 
 
 # SPIKEINTERFACE
@@ -51,7 +52,9 @@ if __name__ == "__main__":
         #
         # - for pipelines, the session data should to be mapped to the "data/ecephys_session" folder
         # - for standalone capsule runs, the data is in "data/ecephys_{session_name}"
-        ecephys_sessions = [p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()]
+        ecephys_sessions = [
+            p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
+        ]
 
         for session_folder in ecephys_sessions:
             session_name = None
@@ -59,7 +62,7 @@ if __name__ == "__main__":
                 data_description = json.load(open(session_folder / "data_description.json", "r"))
                 session_name = data_description["name"]
 
-            # in the AIND pipeline, the session folder is mapped to 
+            # in the AIND pipeline, the session folder is mapped to
             ecephys_base_folder = session_folder / "ecephys"
 
             if (ecephys_base_folder / "ecephys_compressed").is_dir():
@@ -84,9 +87,14 @@ if __name__ == "__main__":
             if compressed:
                 print(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
 
+            if parse(si.__version__) > parse("0.100"):
+                open_ephys_name = "openephysbinary"
+            else:
+                open_ephys_name = "openephys"
+
             # get blocks/experiments and streams info
-            num_blocks = se.get_neo_num_blocks("openephys", ecephys_openephys_folder)
-            stream_names, stream_ids = se.get_neo_streams("openephys", ecephys_openephys_folder)
+            num_blocks = se.get_neo_num_blocks(open_ephys_name, ecephys_openephys_folder)
+            stream_names, stream_ids = se.get_neo_streams(open_ephys_name, ecephys_openephys_folder)
 
             # load first stream to map block_indices to experiment_names
             rec_test = se.read_openephys(ecephys_openephys_folder, block_index=0, stream_name=stream_names[0])
@@ -103,11 +111,28 @@ if __name__ == "__main__":
                         experiment_name = experiment_names[block_index]
                         exp_stream_name = f"{experiment_name}_{stream_name}"
                         if not compressed:
-                            recording = se.read_openephys(ecephys_openephys_folder, stream_name=stream_name, block_index=block_index)
+                            recording = se.read_openephys(
+                                ecephys_openephys_folder, stream_name=stream_name, block_index=block_index
+                            )
                         else:
                             recording = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name}.zarr")
                         recording_name = f"{exp_stream_name}_recording"
-                        recording_dict[(session_name, recording_name)] = recording
+                        recording_dict[(session_name, recording_name)] = {}
+                        recording_dict[(session_name, recording_name)]["raw"] = recording
+
+                        # load the associated LF stream (if available)
+                        stream_name_lf = stream_name.replace("AP", "LFP")
+                        exp_stream_name_lf = exp_stream_name.replace("AP", "LFP")
+                        try:
+                            if not compressed:
+                                recording_lf = se.read_openephys(
+                                    ecephys_openephys_folder, stream_name=stream_name_lf, block_index=block_index
+                                )
+                            else:
+                                recording_lf = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr")
+                            recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                        except:
+                            print(f"\t\tNo LFP stream found for {exp_stream_name}")
 
     elif INPUT == "spikeglx":
         # get blocks/experiments and streams info
@@ -127,7 +152,16 @@ if __name__ == "__main__":
             if "nidq" not in stream_name and "lf" not in stream_name:
                 recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name)
                 recording_name = f"block{block_index}_{stream_name}_recording"
-                recording_dict[(session_name, recording_name)] = recording
+                recording_dict[(session_name, recording_name)] = {}
+                recording_dict[(session_name, recording_name)]["raw"] = recording
+
+                # load the associated LF stream (if available)
+                stream_name_lf = stream_name.replace("ap", "lf")
+                try:
+                    recording_lf = se.read_spikeglx(spikeglx_folder, stream_name=stream_name_lf)
+                    recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                except:
+                    print(f"\t\tNo LFP stream found for {stream_name}")
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
@@ -142,7 +176,11 @@ if __name__ == "__main__":
 
         # get available electrical_series_path options
         # TODO: use NWBRecordingExtractor.fetch_available_electrical_series_paths with spikeinterface==0.101.0
-        from spikeinterface.extractors.nwbextractors import _get_backend_from_local_file, _find_neurodata_type_from_backend, read_file_from_backend
+        from spikeinterface.extractors.nwbextractors import (
+            _get_backend_from_local_file,
+            _find_neurodata_type_from_backend,
+            read_file_from_backend,
+        )
 
         backend = _get_backend_from_local_file(nwb_file)
         file_handle = read_file_from_backend(
@@ -169,12 +207,16 @@ if __name__ == "__main__":
     print("Recording to be processed in parallel:")
     for session_recording_name in recording_dict:
         session_name, recording_name = session_recording_name
-        recording = recording_dict[session_recording_name]
+        recording = recording_dict[session_recording_name]["raw"]
+        recording_lfp = recording_dict[session_recording_name].get("lfp", None)
 
+        HAS_LFP = recording_lfp is not None
         if CONCAT:
             recordings = [recording]
+            recordings_lfp = [recording_lfp] if HAS_LFP else None
         else:
             recordings = si.split_recording(recording)
+            recordings_lfp = si.split_recording(recording_lfp) if HAS_LFP else None
 
         for segment_index, recording in enumerate(recordings):
             if not CONCAT:
@@ -187,26 +229,34 @@ if __name__ == "__main__":
             if len(np.unique(recording.get_channel_groups())) > 1:
                 for group_name, recording_group in recording.split_by("group").items():
                     recording_name_group = f"{recording_name_segment}_group{group_name}"
-                    print(f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}")
                     job_dict = dict(
                         session_name=session_name,
                         recording_name=str(recording_name_group),
-                        recording_dict=recording_group.to_dict(
-                            recursive=True,
-                            relative_to=data_folder
-                        )
+                        recording_dict=recording_group.to_dict(recursive=True, relative_to=data_folder),
                     )
+                    rec_str = f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}"
+                    if HAS_LFP:
+                        recording_lfp_group = recordings_lfp[segment_index].split_by("group")[group_name]
+                        job_dict["recording_lfp_dict"] = recording_lfp_group.to_dict(
+                            recursive=True, relative_to=data_folder
+                        )
+                        rec_str += f" (with LFP stream)"
+                    print(rec_str)
                     job_dict_list.append(job_dict)
             else:
-                print(f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}")
+                rec_str = f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}"
                 job_dict = dict(
                     session_name=session_name,
                     recording_name=str(recording_name_segment),
-                    recording_dict=recording.to_dict(
-                        recursive=True,
-                        relative_to=data_folder
-                    )
+                    recording_dict=recording.to_dict(recursive=True, relative_to=data_folder),
                 )
+                if HAS_LFP:
+                    recording_lfp_segment = recordings_lfp[segment_index]
+                    job_dict["recording_lfp_dict"] = recording_lfp_segment.to_dict(
+                        recursive=True, relative_to=data_folder
+                    )
+                    rec_str += f" (with LFP stream)"
+                print(rec_str)
                 job_dict_list.append(job_dict)
 
     if not results_folder.is_dir():
