@@ -239,7 +239,7 @@ if __name__ == "__main__":
                     )
                     if HAS_LFP:
                         recording_lfp_group = recordings_lfp[segment_index].split_by("group")[group_name]
-                        job_dict["recording_dict_lfp"] = recording_lfp_group.to_dict(
+                        job_dict["recording_lfp_dict"] = recording_lfp_group.to_dict(
                             recursive=True, relative_to=data_folder
                         )
                     job_dict_list.append(job_dict)
