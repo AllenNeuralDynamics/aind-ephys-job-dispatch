@@ -121,18 +121,19 @@ if __name__ == "__main__":
                         recording_dict[(session_name, recording_name)]["raw"] = recording
 
                         # load the associated LF stream (if available)
-                        stream_name_lf = stream_name.replace("AP", "LFP")
-                        exp_stream_name_lf = exp_stream_name.replace("AP", "LFP")
-                        try:
-                            if not compressed:
-                                recording_lf = se.read_openephys(
-                                    ecephys_openephys_folder, stream_name=stream_name_lf, block_index=block_index
-                                )
-                            else:
-                                recording_lf = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr")
-                            recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
-                        except:
-                            print(f"\t\tNo LFP stream found for {exp_stream_name}")
+                        if "AP" in stream_name:
+                            stream_name_lf = stream_name.replace("AP", "LFP")
+                            exp_stream_name_lf = exp_stream_name.replace("AP", "LFP")
+                            try:
+                                if not compressed:
+                                    recording_lf = se.read_openephys(
+                                        ecephys_openephys_folder, stream_name=stream_name_lf, block_index=block_index
+                                    )
+                                else:
+                                    recording_lf = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr")
+                                recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                            except:
+                                print(f"\t\tNo LFP stream found for {exp_stream_name}")
 
     elif INPUT == "spikeglx":
         # get blocks/experiments and streams info
@@ -156,12 +157,13 @@ if __name__ == "__main__":
                 recording_dict[(session_name, recording_name)]["raw"] = recording
 
                 # load the associated LF stream (if available)
-                stream_name_lf = stream_name.replace("ap", "lf")
-                try:
-                    recording_lf = se.read_spikeglx(spikeglx_folder, stream_name=stream_name_lf)
-                    recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
-                except:
-                    print(f"\t\tNo LFP stream found for {stream_name}")
+                if "ap" in stream_name:
+                    stream_name_lf = stream_name.replace("ap", "lf")
+                    try:
+                        recording_lf = se.read_spikeglx(spikeglx_folder, stream_name=stream_name_lf)
+                        recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                    except:
+                        print(f"\t\tNo LFP stream found for {stream_name}")
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
