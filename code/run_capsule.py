@@ -182,6 +182,14 @@ if __name__ == "__main__":
                 recording_name_segment = f"{recording_name}{segment_index + 1}"
             else:
                 recording_name_segment = f"{recording_name}"
+
+            # timestamps should be monotonically increasing!
+            skip_times = False
+            times = recording.get_times()
+            if not np.all(np.diff(times) > 0):
+                for rs in recording._recording_segments:
+                    rs.time_vector = None
+                skip_times = True
             duration = np.round(recording.get_total_duration(), 2)
 
             # if multiple channel groups, process in parallel
@@ -189,24 +197,30 @@ if __name__ == "__main__":
                 for group_name, recording_group in recording.split_by("group").items():
                     recording_name_group = f"{recording_name_segment}_group{group_name}"
                     print(f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}")
+                    if skip_times:
+                        print(f"\t\tTimes not monotonically increasing. Disabled")
                     job_dict = dict(
                         session_name=session_name,
                         recording_name=str(recording_name_group),
                         recording_dict=recording_group.to_dict(
                             recursive=True,
                             relative_to=data_folder
-                        )
+                        ),
+                        skip_times=skip_times
                     )
                     job_dict_list.append(job_dict)
             else:
                 print(f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}")
+                if skip_times:
+                    print(f"\t\tTimes not monotonically increasing. Disabled")
                 job_dict = dict(
                     session_name=session_name,
                     recording_name=str(recording_name_segment),
                     recording_dict=recording.to_dict(
                         recursive=True,
                         relative_to=data_folder
-                    )
+                    ),
+                    skip_times=skip_times
                 )
                 job_dict_list.append(job_dict)
 
