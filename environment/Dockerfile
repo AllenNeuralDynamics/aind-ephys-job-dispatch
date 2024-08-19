@@ -13,6 +13,7 @@ COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
     hdmf-zarr==0.8.0 \
+    probeinterface==0.2.23 \
     pynwb==2.8.0 \
     spikeinterface[full]==0.101.0 \
     wavpack-numcodecs==0.1.5
