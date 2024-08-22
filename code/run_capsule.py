@@ -32,14 +32,14 @@ concat_group.add_argument("static_concatenate", nargs="?", default="false", help
 input_group = parser.add_mutually_exclusive_group()
 input_help = "Which 'loader' to use (aind | spikeglx | nwb)"
 input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "nwb"])
-input_group.add_argument("static_input", nargs="?", default="aind", help=input_help)
+input_group.add_argument("static_input", nargs="?", help=input_help)
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
 
     CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
-    INPUT = args.input or args.static_input
+    INPUT = args.static_input or args.input
 
     print(f"Running job dispatcher with the following parameters:")
     print(f"\tCONCATENATE RECORDINGS: {CONCAT}")
