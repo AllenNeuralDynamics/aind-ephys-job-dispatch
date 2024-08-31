@@ -29,6 +29,11 @@ concat_help = "Whether to concatenate recordings (segments) or not. Default: Fal
 concat_group.add_argument("--concatenate", action="store_true", help=concat_help)
 concat_group.add_argument("static_concatenate", nargs="?", default="false", help=concat_help)
 
+split_group = parser.add_mutually_exclusive_group()
+split_help = "Whether to process different groups separately"
+split_group.add_argument("--split-groups", action="store_true", help=split_help)
+split_group.add_argument("static_split_groups", nargs="?", default="false", help=split_help)
+
 input_group = parser.add_mutually_exclusive_group()
 input_help = "Which 'loader' to use (aind | spikeglx | nwb)"
 input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "nwb"])
@@ -39,10 +44,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
+    SPLIT_GROUPS = True if args.static_split_groups and args.static_split_groups.lower() == "true" else args.split_groups
     INPUT = args.static_input or args.input
 
     print(f"Running job dispatcher with the following parameters:")
     print(f"\tCONCATENATE RECORDINGS: {CONCAT}")
+    print(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
     print(f"\tINPUT: {INPUT}")
 
     print(f"Parsing {INPUT} input folder")
@@ -215,7 +222,7 @@ if __name__ == "__main__":
             duration = np.round(recording.get_total_duration(), 2)
 
             # if multiple channel groups, process in parallel
-            if len(np.unique(recording.get_channel_groups())) > 1:
+            if SPLIT_GROUPS and len(np.unique(recording.get_channel_groups())) > 1:
                 for group_name, recording_group in recording.split_by("group").items():
                     recording_name_group = f"{recording_name_segment}_group{group_name}"
                     if skip_times:
