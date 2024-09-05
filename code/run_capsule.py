@@ -216,8 +216,7 @@ if __name__ == "__main__":
             skip_times = False
             times = recording.get_times(segment_index=segment_index)
             if not np.all(np.diff(times) > 0):
-                for rs in recording._recording_segments:
-                    rs.time_vector = None
+                recording.reset_times()
                 skip_times = True
             duration = np.round(recording.get_total_duration(), 2)
 
