@@ -8,7 +8,6 @@ import argparse
 import numpy as np
 from pathlib import Path
 import json
-from packaging.version import parse
 
 
 # SPIKEINTERFACE
@@ -21,6 +20,7 @@ from spikeinterface.core.core_tools import SIJsonEncoder
 data_folder = Path("../data")
 results_folder = Path("../results")
 
+
 # Define argument parser
 parser = argparse.ArgumentParser(description="Dispatch jobs for AIND ephys pipeline")
 
@@ -28,6 +28,11 @@ concat_group = parser.add_mutually_exclusive_group()
 concat_help = "Whether to concatenate recordings (segments) or not. Default: False"
 concat_group.add_argument("--concatenate", action="store_true", help=concat_help)
 concat_group.add_argument("static_concatenate", nargs="?", default="false", help=concat_help)
+
+split_group = parser.add_mutually_exclusive_group()
+split_help = "Whether to process different groups separately"
+split_group.add_argument("--split-groups", action="store_true", help=split_help)
+split_group.add_argument("static_split_groups", nargs="?", default="false", help=split_help)
 
 input_group = parser.add_mutually_exclusive_group()
 input_help = "Which 'loader' to use (aind | spikeglx | nwb)"
@@ -39,10 +44,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
+    SPLIT_GROUPS = True if args.static_split_groups and args.static_split_groups.lower() == "true" else args.split_groups
     INPUT = args.static_input or args.input
 
     print(f"Running job dispatcher with the following parameters:")
     print(f"\tCONCATENATE RECORDINGS: {CONCAT}")
+    print(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
     print(f"\tINPUT: {INPUT}")
 
     print(f"Parsing {INPUT} input folder")
@@ -87,14 +94,9 @@ if __name__ == "__main__":
             if compressed:
                 print(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
 
-            if parse(si.__version__) >= parse("0.101.0"):
-                open_ephys_name = "openephysbinary"
-            else:
-                open_ephys_name = "openephys"
-
             # get blocks/experiments and streams info
-            num_blocks = se.get_neo_num_blocks(open_ephys_name, ecephys_openephys_folder)
-            stream_names, stream_ids = se.get_neo_streams(open_ephys_name, ecephys_openephys_folder)
+            num_blocks = se.get_neo_num_blocks("openephysbinary", ecephys_openephys_folder)
+            stream_names, stream_ids = se.get_neo_streams("openephysbinary", ecephys_openephys_folder)
 
             # load first stream to map block_indices to experiment_names
             rec_test = se.read_openephys(ecephys_openephys_folder, block_index=0, stream_name=stream_names[0])
@@ -176,23 +178,7 @@ if __name__ == "__main__":
         num_blocks = 1
         block_index = 0
 
-        # get available electrical_series_path options
-        # TODO: use NWBRecordingExtractor.fetch_available_electrical_series_paths with spikeinterface==0.101.0
-        from spikeinterface.extractors.nwbextractors import (
-            _get_backend_from_local_file,
-            _find_neurodata_type_from_backend,
-            read_file_from_backend,
-        )
-
-        backend = _get_backend_from_local_file(nwb_file)
-        file_handle = read_file_from_backend(
-            file_path=nwb_file,
-        )
-        electrical_series_paths = _find_neurodata_type_from_backend(
-            file_handle,
-            neurodata_type="ElectricalSeries",
-            backend=backend,
-        )
+        electrical_series_paths = se.NwbRecordingExtractor.fetch_available_electrical_series_paths(nwb_file)
 
         print(f"\tSession name: {session_name}")
         print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electrical_series_paths)}")
@@ -225,16 +211,29 @@ if __name__ == "__main__":
                 recording_name_segment = f"{recording_name}{segment_index + 1}"
             else:
                 recording_name_segment = f"{recording_name}"
+
+            # timestamps should be monotonically increasing!
+            skip_times = False
+            times = recording.get_times(segment_index=segment_index)
+            if not np.all(np.diff(times) > 0):
+                recording.reset_times()
+                skip_times = True
             duration = np.round(recording.get_total_duration(), 2)
 
             # if multiple channel groups, process in parallel
-            if len(np.unique(recording.get_channel_groups())) > 1:
+            if SPLIT_GROUPS and len(np.unique(recording.get_channel_groups())) > 1:
                 for group_name, recording_group in recording.split_by("group").items():
                     recording_name_group = f"{recording_name_segment}_group{group_name}"
+                    if skip_times:
+                        print(f"\t\tTimes not monotonically increasing. Disabled")
                     job_dict = dict(
                         session_name=session_name,
                         recording_name=str(recording_name_group),
-                        recording_dict=recording_group.to_dict(recursive=True, relative_to=data_folder),
+                        recording_dict=recording_group.to_dict(
+                            recursive=True,
+                            relative_to=data_folder
+                        ),
+                        skip_times=skip_times
                     )
                     rec_str = f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}"
                     if HAS_LFP:
@@ -246,12 +245,18 @@ if __name__ == "__main__":
                     print(rec_str)
                     job_dict_list.append(job_dict)
             else:
-                rec_str = f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}"
+                if skip_times:
+                    print(f"\t\tTimes not monotonically increasing. Disabled")
                 job_dict = dict(
                     session_name=session_name,
                     recording_name=str(recording_name_segment),
-                    recording_dict=recording.to_dict(recursive=True, relative_to=data_folder),
+                    recording_dict=recording.to_dict(
+                        recursive=True,
+                        relative_to=data_folder
+                    ),
+                    skip_times=skip_times
                 )
+                rec_str = f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}"
                 if HAS_LFP:
                     recording_lfp_segment = recordings_lfp[segment_index]
                     job_dict["recording_lfp_dict"] = recording_lfp_segment.to_dict(
