@@ -169,11 +169,11 @@ if __name__ == "__main__":
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
-        all_files = [p for p in data_folder.iterdir()]
-        all_all_files = [p for p in data_folder.glob("*")]
-        print(f"all_files: {all_files}")
-        print(f"all_all_files: {all_all_files}")
-        nwb_files = [p for p in data_folder.glob("**/*.nwb")]
+        all_input_folders = [p for p in data_folder.iterdir() if p.is_dir()]
+        if len(all_input_folders) == 1:
+            nwb_files = [p for p in all_input_folders[0].iterdir() if p.name.endswith(".nwb")]
+        else:
+            nwb_files = [p for p in data_folder.iterdir() if p.name.endswith(".nwb")]
         print(f"nwb_files: {nwb_files}")
         if len(nwb_files) == 0:
             raise ValueError("No NWB files found in the data folder")
