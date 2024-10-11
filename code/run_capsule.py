@@ -53,10 +53,6 @@ if __name__ == "__main__":
     print(f"\tINPUT: {INPUT}")
 
     print(f"Parsing {INPUT} input folder")
-
-    all_files = list(data_folder.iterdir())
-    print(f"Found {len(all_files)} files in the data folder:\n{all_files}")
-
     recording_dict = {}
     if INPUT == "aind":
         # find ecephys sessions to process
@@ -173,13 +169,11 @@ if __name__ == "__main__":
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
-        nwb_files = [p for p in data_folder.glob("*.nwb*")]
-        print(nwb_files)
-        if len(all_files) == 1:
-            input_folder = all_files[0]
-            all_files_in_folder = list(input_folder.iterdir())
-            print(all_files_in_folder)
-        assert len(nwb_files) == 1, "Attach one NWB file at a time"
+        nwb_files = [p for p in data_folder.glob("*.nwb")]
+        if len(nwb_files) == 0:
+            raise ValueError("No NWB files found in the data folder")
+        elif len(nwb_files) > 1:
+            raise ValueError("Attach one NWB file at a time")
         nwb_file = nwb_files[0]
         session_name = nwb_file.name
 
