@@ -195,6 +195,12 @@ if __name__ == "__main__":
             if "acquisition" in electrical_series_path and "LFP" not in electrical_series_path:
                 stream_name = electrical_series_path.replace("/", "-")
                 recording = se.read_nwb_recording(nwb_file, electrical_series_path=electrical_series_path)
+                if recording.sampling_frequency < 10000:
+                    print(
+                        f"\t\t{electrical_series_path} is probably an LFP signal (sampling frequency: "
+                        f"{recording.sampling_frequency} Hz). Skipping"
+                    )
+                    continue
                 recording_name = f"block{block_index}_{stream_name}_recording"
                 recording_dict[(session_name, recording_name)] = {}
                 recording_dict[(session_name, recording_name)]["raw"] = recording
