@@ -173,7 +173,7 @@ if __name__ == "__main__":
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
-        nwb_files = [p for p in data_folder.iterdir() if "nwb" in p.name]
+        nwb_files = [p for p in data_folder.glob("*.nwb*")]
         assert len(nwb_files) == 1, "Attach one NWB file at a time"
         nwb_file = nwb_files[0]
         session_name = nwb_file.name
