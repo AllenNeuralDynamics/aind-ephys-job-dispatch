@@ -53,6 +53,10 @@ if __name__ == "__main__":
     print(f"\tINPUT: {INPUT}")
 
     print(f"Parsing {INPUT} input folder")
+
+    all_files = list(data_folder.iterdir())
+    print(f"Found {len(all_files)} files in the data folder:\n{all_files}")
+
     recording_dict = {}
     if INPUT == "aind":
         # find ecephys sessions to process
