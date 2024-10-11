@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
-        nwb_files = [p for p in data_folder.glob("*.nwb")]
+        nwb_files = [p for p in data_folder.glob("**/*.nwb")]
         if len(nwb_files) == 0:
             raise ValueError("No NWB files found in the data folder")
         elif len(nwb_files) > 1:
