@@ -34,6 +34,18 @@ split_help = "Whether to process different groups separately"
 split_group.add_argument("--split-groups", action="store_true", help=split_help)
 split_group.add_argument("static_split_groups", nargs="?", default="false", help=split_help)
 
+debug_group = parser.add_mutually_exclusive_group()
+debug_help = "Whether to run in DEBUG mode"
+debug_group.add_argument("--debug", action="store_true", help=debug_help)
+debug_group.add_argument("static_debug", nargs="?", default="false", help=debug_help)
+
+debug_duration_group = parser.add_mutually_exclusive_group()
+debug_duration_help = (
+    "Duration of clipped recording in debug mode. Default is 30 seconds. Only used if debug is enabled"
+)
+debug_duration_group.add_argument("--debug-duration", default=30, help=debug_duration_help)
+debug_duration_group.add_argument("static_debug_duration", nargs="?", default=None, help=debug_duration_help)
+
 input_group = parser.add_mutually_exclusive_group()
 input_help = "Which 'loader' to use (aind | spikeglx | nwb)"
 input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "nwb"])
@@ -45,11 +57,15 @@ if __name__ == "__main__":
 
     CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
     SPLIT_GROUPS = True if args.static_split_groups and args.static_split_groups.lower() == "true" else args.split_groups
+    DEBUG = args.debug or args.static_debug.lower() == "true"
+    DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
     INPUT = args.static_input or args.input
 
     print(f"Running job dispatcher with the following parameters:")
     print(f"\tCONCATENATE RECORDINGS: {CONCAT}")
     print(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
+    print(f"\tDEBUG: {DEBUG}")
+    print(f"\tDEBUG DURATION: {DEBUG_DURATION}")
     print(f"\tINPUT: {INPUT}")
 
     print(f"Parsing {INPUT} input folder")
@@ -221,26 +237,50 @@ if __name__ == "__main__":
             recordings = si.split_recording(recording)
             recordings_lfp = si.split_recording(recording_lfp) if HAS_LFP else None
 
-        for segment_index, recording in enumerate(recordings):
+        for recording_index, recording in enumerate(recordings):
             if not CONCAT:
-                recording_name_segment = f"{recording_name}{segment_index + 1}"
+                recording_name_segment = f"{recording_name}{recording_index + 1}"
             else:
                 recording_name_segment = f"{recording_name}"
 
+            if HAS_LFP:
+                recording_lfp = recordings_lfp[recording_index]
+
             # timestamps should be monotonically increasing!
             skip_times = False
-            times = recording.get_times(segment_index=segment_index)
-            if not np.all(np.diff(times) > 0):
+            for segment_index in range(recording.get_num_segments()):
+                times = recording.get_times(segment_index=segment_index)
+                if not np.all(np.diff(times) > 0):
+                    print(f"\t\t{recording_name} - Times not monotonically increasing. Resetting timestamps.")
+                    skip_times = True
+                    break
+            if skip_times:
                 recording.reset_times()
-                skip_times = True
             duration = np.round(recording.get_total_duration(), 2)
+
+            if DEBUG:
+                recording_list = []
+                for segment_index in range(recording.get_num_segments()):
+                    recording_one = si.split_recording(recording)[segment_index]
+                    recording_one = recording_one.frame_slice(
+                        start_frame=0, end_frame=int(DEBUG_DURATION * recording.sampling_frequency)
+                    )
+                    recording_list.append(recording_one)
+                recording = si.append_recordings(recording_list)
+                if HAS_LFP:
+                    recording_lfp_list = []
+                    for segment_index in range(recording_lfp.get_num_segments()):
+                        recording_lfp_one = si.split_recording(recording_lfp)[segment_index]
+                        recording_lfp_one = recording_lfp_one.frame_slice(
+                            start_frame=0, end_frame=int(DEBUG_DURATION * recording_lfp.sampling_frequency)
+                        )
+                        recording_lfp_list.append(recording_lfp_one)
+                    recording_lfp = si.append_recordings(recording_lfp_list)
 
             # if multiple channel groups, process in parallel
             if SPLIT_GROUPS and len(np.unique(recording.get_channel_groups())) > 1:
                 for group_name, recording_group in recording.split_by("group").items():
                     recording_name_group = f"{recording_name_segment}_group{group_name}"
-                    if skip_times:
-                        print(f"\t\tTimes not monotonically increasing. Disabled")
                     job_dict = dict(
                         session_name=session_name,
                         recording_name=str(recording_name_group),
@@ -248,11 +288,12 @@ if __name__ == "__main__":
                             recursive=True,
                             relative_to=data_folder
                         ),
-                        skip_times=skip_times
+                        skip_times=skip_times,
+                        debug=DEBUG
                     )
                     rec_str = f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}"
                     if HAS_LFP:
-                        recording_lfp_group = recordings_lfp[segment_index].split_by("group")[group_name]
+                        recording_lfp_group = recording_lfp.split_by("group")[group_name]
                         job_dict["recording_lfp_dict"] = recording_lfp_group.to_dict(
                             recursive=True, relative_to=data_folder
                         )
@@ -260,8 +301,6 @@ if __name__ == "__main__":
                     print(rec_str)
                     job_dict_list.append(job_dict)
             else:
-                if skip_times:
-                    print(f"\t\tTimes not monotonically increasing. Disabled")
                 job_dict = dict(
                     session_name=session_name,
                     recording_name=str(recording_name_segment),
@@ -269,12 +308,12 @@ if __name__ == "__main__":
                         recursive=True,
                         relative_to=data_folder
                     ),
-                    skip_times=skip_times
+                    skip_times=skip_times,
+                    debug=DEBUG
                 )
                 rec_str = f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}"
                 if HAS_LFP:
-                    recording_lfp_segment = recordings_lfp[segment_index]
-                    job_dict["recording_lfp_dict"] = recording_lfp_segment.to_dict(
+                    job_dict["recording_lfp_dict"] = recording_lfp.to_dict(
                         recursive=True, relative_to=data_folder
                     )
                     rec_str += f" (with LFP stream)"
