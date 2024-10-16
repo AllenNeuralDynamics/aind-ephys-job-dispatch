@@ -330,6 +330,7 @@ if __name__ == "__main__":
                         recording_name=str(recording_name_group),
                         recording_dict=recording_group.to_dict(recursive=True, relative_to=data_folder),
                         skip_times=skip_times,
+                        duration=duration,
                         debug=DEBUG,
                     )
                     rec_str = f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}"
@@ -347,6 +348,7 @@ if __name__ == "__main__":
                     recording_name=str(recording_name_segment),
                     recording_dict=recording.to_dict(recursive=True, relative_to=data_folder),
                     skip_times=skip_times,
+                    duration=duration,
                     debug=DEBUG,
                 )
                 rec_str = f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}"
