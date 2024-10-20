@@ -238,7 +238,7 @@ if __name__ == "__main__":
         if len(nwb_files) == 0:
             raise ValueError("No NWB files found in the data folder")
         elif len(nwb_files) > 1:
-            raise ValueError("Attach one NWB file at a time")
+            raise ValueError("Multiple NWB files found in the data folder. Please only add one at a time")
         nwb_file = nwb_files[0]
         session_name = nwb_file.name
 
@@ -252,7 +252,7 @@ if __name__ == "__main__":
         print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electrical_series_paths)}")
         for electrical_series_path in electrical_series_paths:
             # only use paths in acquisition
-            if "acquisition" in electrical_series_path and "LFP" not in electrical_series_path:
+            if "acquisition" in electrical_series_path:
                 stream_name = electrical_series_path.replace("/", "-")
                 recording = se.read_nwb_recording(nwb_file, electrical_series_path=electrical_series_path)
                 if recording.sampling_frequency < 10000:
