@@ -34,9 +34,21 @@ split_help = "Whether to process different groups separately"
 split_group.add_argument("--split-groups", action="store_true", help=split_help)
 split_group.add_argument("static_split_groups", nargs="?", default="false", help=split_help)
 
+debug_group = parser.add_mutually_exclusive_group()
+debug_help = "Whether to run in DEBUG mode"
+debug_group.add_argument("--debug", action="store_true", help=debug_help)
+debug_group.add_argument("static_debug", nargs="?", default="false", help=debug_help)
+
+debug_duration_group = parser.add_mutually_exclusive_group()
+debug_duration_help = (
+    "Duration of clipped recording in debug mode. Default is 30 seconds. Only used if debug is enabled"
+)
+debug_duration_group.add_argument("--debug-duration", default=30, help=debug_duration_help)
+debug_duration_group.add_argument("static_debug_duration", nargs="?", default=None, help=debug_duration_help)
+
 input_group = parser.add_mutually_exclusive_group()
 input_help = "Which 'loader' to use (aind | spikeglx | nwb)"
-input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "nwb"])
+input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "openephys", "nwb"])
 input_group.add_argument("static_input", nargs="?", help=input_help)
 
 
@@ -44,12 +56,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
-    SPLIT_GROUPS = True if args.static_split_groups and args.static_split_groups.lower() == "true" else args.split_groups
+    SPLIT_GROUPS = (
+        True if args.static_split_groups and args.static_split_groups.lower() == "true" else args.split_groups
+    )
+    DEBUG = args.debug or args.static_debug.lower() == "true"
+    DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
     INPUT = args.static_input or args.input
 
     print(f"Running job dispatcher with the following parameters:")
     print(f"\tCONCATENATE RECORDINGS: {CONCAT}")
     print(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
+    print(f"\tDEBUG: {DEBUG}")
+    print(f"\tDEBUG DURATION: {DEBUG_DURATION}")
     print(f"\tINPUT: {INPUT}")
 
     print(f"Parsing {INPUT} input folder")
@@ -132,7 +150,9 @@ if __name__ == "__main__":
                                         ecephys_openephys_folder, stream_name=stream_name_lf, block_index=block_index
                                     )
                                 else:
-                                    recording_lf = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr")
+                                    recording_lf = si.read_zarr(
+                                        ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr"
+                                    )
                                 recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
                             except:
                                 print(f"\t\tNo LFP stream found for {exp_stream_name}")
@@ -140,7 +160,7 @@ if __name__ == "__main__":
     elif INPUT == "spikeglx":
         # get blocks/experiments and streams info
         spikeglx_folders = [p for p in data_folder.iterdir() if p.is_dir()]
-        assert len(spikeglx_folders) == 1, "Attach one SpikeGLX folder at a time"
+        assert len(spikeglx_folders) == 1, "The data folder should contain a single SpikeGLX folder at a time"
         spikeglx_folder = spikeglx_folders[0]
         session_name = spikeglx_folder.name
         stream_names, stream_ids = se.get_neo_streams("spikeglx", spikeglx_folder)
@@ -167,10 +187,58 @@ if __name__ == "__main__":
                     except:
                         print(f"\t\tNo LFP stream found for {stream_name}")
 
+    elif INPUT == "openephys":
+        # get blocks/experiments and streams info
+        openephys_folders = [p for p in data_folder.iterdir() if p.is_dir()]
+        assert len(openephys_folders) == 1, "The data folder should contain a single OpenEphys folder at a time"
+        openephys_folder = openephys_folders[0]
+        session_name = openephys_folder.name
+        num_blocks = se.get_neo_num_blocks("openephysbinary", openephys_folder)
+        stream_names, stream_ids = se.get_neo_streams("openephysbinary", openephys_folder)
+
+        print(f"\tSession name: {session_name}")
+        print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
+
+        # load first stream to map block_indices to experiment_names
+        rec_test = se.read_openephys(openephys_folder, block_index=0, stream_name=stream_names[0])
+        record_node = list(rec_test.neo_reader.folder_structure.keys())[0]
+        experiments = rec_test.neo_reader.folder_structure[record_node]["experiments"]
+        exp_ids = list(experiments.keys())
+        experiment_names = [experiments[exp_id]["name"] for exp_id in sorted(exp_ids)]
+
+        for block_index in range(num_blocks):
+            for stream_name in stream_names:
+                if "NIDAQ" not in stream_name and "LFP" not in stream_name:
+                    experiment_name = experiment_names[block_index]
+                    exp_stream_name = f"{experiment_name}_{stream_name}"
+                    recording = se.read_openephys(openephys_folder, stream_name=stream_name, block_index=block_index)
+                    recording_name = f"{exp_stream_name}_recording"
+                    recording_dict[(session_name, recording_name)] = {}
+                    recording_dict[(session_name, recording_name)]["raw"] = recording
+
+                    # load the associated LFP stream (if available)
+                    if "AP" in stream_name:
+                        stream_name_lf = stream_name.replace("AP", "LFP")
+                        try:
+                            recording_lf = se.read_spikeglx(
+                                openephys_folder, stream_name=stream_name_lf, block_index=block_index
+                            )
+                            recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                        except:
+                            print(f"\t\tNo LFP stream found for {stream_name}")
+
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
-        nwb_files = [p for p in data_folder.iterdir() if "nwb" in p.name]
-        assert len(nwb_files) == 1, "Attach one NWB file at a time"
+        all_input_folders = [p for p in data_folder.iterdir() if p.is_dir()]
+        if len(all_input_folders) == 1:
+            nwb_files = [p for p in all_input_folders[0].iterdir() if p.name.endswith(".nwb")]
+        else:
+            nwb_files = [p for p in data_folder.iterdir() if p.name.endswith(".nwb")]
+        print(f"nwb_files: {nwb_files}")
+        if len(nwb_files) == 0:
+            raise ValueError("No NWB files found in the data folder")
+        elif len(nwb_files) > 1:
+            raise ValueError("Multiple NWB files found in the data folder. Please only add one at a time")
         nwb_file = nwb_files[0]
         session_name = nwb_file.name
 
@@ -187,8 +255,15 @@ if __name__ == "__main__":
             if "acquisition" in electrical_series_path:
                 stream_name = electrical_series_path.replace("/", "-")
                 recording = se.read_nwb_recording(nwb_file, electrical_series_path=electrical_series_path)
+                if recording.sampling_frequency < 10000:
+                    print(
+                        f"\t\t{electrical_series_path} is probably an LFP signal (sampling frequency: "
+                        f"{recording.sampling_frequency} Hz). Skipping"
+                    )
+                    continue
                 recording_name = f"block{block_index}_{stream_name}_recording"
-                recording_dict[(session_name, recording_name)] = recording
+                recording_dict[(session_name, recording_name)] = {}
+                recording_dict[(session_name, recording_name)]["raw"] = recording
 
     # populate job dict list
     job_dict_list = []
@@ -206,38 +281,61 @@ if __name__ == "__main__":
             recordings = si.split_recording(recording)
             recordings_lfp = si.split_recording(recording_lfp) if HAS_LFP else None
 
-        for segment_index, recording in enumerate(recordings):
+        for recording_index, recording in enumerate(recordings):
             if not CONCAT:
-                recording_name_segment = f"{recording_name}{segment_index + 1}"
+                recording_name_segment = f"{recording_name}{recording_index + 1}"
             else:
                 recording_name_segment = f"{recording_name}"
 
+            if HAS_LFP:
+                recording_lfp = recordings_lfp[recording_index]
+
             # timestamps should be monotonically increasing!
             skip_times = False
-            times = recording.get_times(segment_index=segment_index)
-            if not np.all(np.diff(times) > 0):
+            for segment_index in range(recording.get_num_segments()):
+                times = recording.get_times(segment_index=segment_index)
+                if not np.all(np.diff(times) > 0):
+                    print(f"\t\t{recording_name} - Times not monotonically increasing. Resetting timestamps.")
+                    skip_times = True
+                    break
+            if skip_times:
                 recording.reset_times()
-                skip_times = True
             duration = np.round(recording.get_total_duration(), 2)
+
+            if DEBUG:
+                recording_list = []
+                for segment_index in range(recording.get_num_segments()):
+                    recording_one = si.split_recording(recording)[segment_index]
+                    recording_one = recording_one.frame_slice(
+                        start_frame=0, end_frame=int(DEBUG_DURATION * recording.sampling_frequency)
+                    )
+                    recording_list.append(recording_one)
+                recording = si.append_recordings(recording_list)
+                if HAS_LFP:
+                    recording_lfp_list = []
+                    for segment_index in range(recording_lfp.get_num_segments()):
+                        recording_lfp_one = si.split_recording(recording_lfp)[segment_index]
+                        recording_lfp_one = recording_lfp_one.frame_slice(
+                            start_frame=0, end_frame=int(DEBUG_DURATION * recording_lfp.sampling_frequency)
+                        )
+                        recording_lfp_list.append(recording_lfp_one)
+                    recording_lfp = si.append_recordings(recording_lfp_list)
 
             # if multiple channel groups, process in parallel
             if SPLIT_GROUPS and len(np.unique(recording.get_channel_groups())) > 1:
                 for group_name, recording_group in recording.split_by("group").items():
                     recording_name_group = f"{recording_name_segment}_group{group_name}"
-                    if skip_times:
-                        print(f"\t\tTimes not monotonically increasing. Disabled")
                     job_dict = dict(
                         session_name=session_name,
                         recording_name=str(recording_name_group),
-                        recording_dict=recording_group.to_dict(
-                            recursive=True,
-                            relative_to=data_folder
-                        ),
-                        skip_times=skip_times
+                        recording_dict=recording_group.to_dict(recursive=True, relative_to=data_folder),
+                        skip_times=skip_times,
+                        duration=duration,
+                        debug=DEBUG,
                     )
                     rec_str = f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}"
                     if HAS_LFP:
-                        recording_lfp_group = recordings_lfp[segment_index].split_by("group")[group_name]
+                        recording_lfp_group = recording_lfp.split_by("group")[group_name]
                         job_dict["recording_lfp_dict"] = recording_lfp_group.to_dict(
                             recursive=True, relative_to=data_folder
                         )
@@ -245,23 +343,17 @@ if __name__ == "__main__":
                     print(rec_str)
                     job_dict_list.append(job_dict)
             else:
-                if skip_times:
-                    print(f"\t\tTimes not monotonically increasing. Disabled")
                 job_dict = dict(
                     session_name=session_name,
                     recording_name=str(recording_name_segment),
-                    recording_dict=recording.to_dict(
-                        recursive=True,
-                        relative_to=data_folder
-                    ),
-                    skip_times=skip_times
+                    recording_dict=recording.to_dict(recursive=True, relative_to=data_folder),
+                    skip_times=skip_times,
+                    duration=duration,
+                    debug=DEBUG,
                 )
                 rec_str = f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}"
                 if HAS_LFP:
-                    recording_lfp_segment = recordings_lfp[segment_index]
-                    job_dict["recording_lfp_dict"] = recording_lfp_segment.to_dict(
-                        recursive=True, relative_to=data_folder
-                    )
+                    job_dict["recording_lfp_dict"] = recording_lfp.to_dict(recursive=True, relative_to=data_folder)
                     rec_str += f" (with LFP stream)"
                 print(rec_str)
                 job_dict_list.append(job_dict)
