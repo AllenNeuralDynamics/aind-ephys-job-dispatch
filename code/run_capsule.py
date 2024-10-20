@@ -300,7 +300,6 @@ if __name__ == "__main__":
                     break
             if skip_times:
                 recording.reset_times()
-            duration = np.round(recording.get_total_duration(), 2)
 
             if DEBUG:
                 recording_list = []
@@ -320,6 +319,8 @@ if __name__ == "__main__":
                         )
                         recording_lfp_list.append(recording_lfp_one)
                     recording_lfp = si.append_recordings(recording_lfp_list)
+
+            duration = np.round(recording.get_total_duration(), 2)
 
             # if multiple channel groups, process in parallel
             if SPLIT_GROUPS and len(np.unique(recording.get_channel_groups())) > 1:
