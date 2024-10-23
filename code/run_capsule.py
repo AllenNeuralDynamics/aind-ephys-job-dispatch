@@ -220,7 +220,7 @@ if __name__ == "__main__":
                     if "AP" in stream_name:
                         stream_name_lf = stream_name.replace("AP", "LFP")
                         try:
-                            recording_lf = se.read_spikeglx(
+                            recording_lf = se.read_openephys(
                                 openephys_folder, stream_name=stream_name_lf, block_index=block_index
                             )
                             recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
