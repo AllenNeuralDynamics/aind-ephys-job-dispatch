@@ -211,7 +211,12 @@ if __name__ == "__main__":
                 if "NI-DAQ" not in stream_name and "LFP" not in stream_name:
                     experiment_name = experiment_names[block_index]
                     exp_stream_name = f"{experiment_name}_{stream_name}"
-                    recording = se.read_openephys(openephys_folder, stream_name=stream_name, block_index=block_index)
+                    recording = se.read_openephys(
+                        openephys_folder,
+                        load_sync_timestamps=True,
+                        stream_name=stream_name,
+                        block_index=block_index
+                    )
                     recording_name = f"{exp_stream_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["raw"] = recording
