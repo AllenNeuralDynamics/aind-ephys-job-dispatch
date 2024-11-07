@@ -6,7 +6,6 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 # GENERAL IMPORTS
 import argparse
 import numpy as np
-import warnings
 from pathlib import Path
 import json
 
