@@ -14,7 +14,7 @@ COPY git-askpass /
 RUN pip install -U --no-cache-dir \
     hdmf-zarr==0.8.0 \
     pynwb==2.8.0 \
-    spikeinterface[full]==0.101.1 \
+    spikeinterface[full]==0.101.2 \
     wavpack-numcodecs==0.2.1
 
 COPY postInstall /
