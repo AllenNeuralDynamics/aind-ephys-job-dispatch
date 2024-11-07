@@ -304,13 +304,13 @@ if __name__ == "__main__":
                 times_diff = np.diff(times)
                 num_negative_times = np.sum(times_diff < 0)
 
-                if not np.all(times_diff):
+                if num_negative_times > 0:
                     print(f"\t\t{recording_name} - Times not monotonically increasing.")
                     if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
                         print(f"\t\t{recording_name} - Skipping timestamps for too many negative timestamps")
                         skip_times = True
                         break
-                    if np.max(np.abs(times_diff)) > MAX_TIMESTAMPS_DEVIATION_MS:
+                    if np.max(np.abs(times_diff)) * 1000 > MAX_TIMESTAMPS_DEVIATION_MS:
                         print(
                             f"\t\t{recording_name} - Skipping timesstamps for too large deviation ({np.max(np.abs(times_diff))} ms)"
                         )
