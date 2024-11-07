@@ -6,6 +6,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 # GENERAL IMPORTS
 import argparse
 import numpy as np
+import warnings
 from pathlib import Path
 import json
 
@@ -15,6 +16,10 @@ import spikeinterface as si
 import spikeinterface.extractors as se
 
 from spikeinterface.core.core_tools import SIJsonEncoder
+
+
+MAX_NUM_NEGATIVE_TIMESTAMPS = 10
+MAX_TIMESTAMPS_DEVIATION_MS = 1
 
 
 data_folder = Path("../data")
@@ -212,10 +217,7 @@ if __name__ == "__main__":
                     experiment_name = experiment_names[block_index]
                     exp_stream_name = f"{experiment_name}_{stream_name}"
                     recording = se.read_openephys(
-                        openephys_folder,
-                        load_sync_timestamps=True,
-                        stream_name=stream_name,
-                        block_index=block_index
+                        openephys_folder, load_sync_timestamps=True, stream_name=stream_name, block_index=block_index
                     )
                     recording_name = f"{exp_stream_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
@@ -295,14 +297,26 @@ if __name__ == "__main__":
             if HAS_LFP:
                 recording_lfp = recordings_lfp[recording_index]
 
-            # timestamps should be monotonically increasing!
+            # timestamps should be monotonically increasing, but we allow for small glitches
             skip_times = False
             for segment_index in range(recording.get_num_segments()):
                 times = recording.get_times(segment_index=segment_index)
-                if not np.all(np.diff(times) > 0):
-                    print(f"\t\t{recording_name} - Times not monotonically increasing. Resetting timestamps.")
-                    skip_times = True
-                    break
+                times_diff = np.diff(times)
+                num_negative_times = np.sum(times_diff < 0)
+
+                if num_negative_times > 0:
+                    print(f"\t\t{recording_name} - Times not monotonically increasing.")
+                    if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
+                        print(f"\t\t{recording_name} - Skipping timestamps for too many negative timestamps")
+                        skip_times = True
+                        break
+                    if np.max(np.abs(times_diff)) * 1000 > MAX_TIMESTAMPS_DEVIATION_MS:
+                        print(
+                            f"\t\t{recording_name} - Skipping timesstamps for too large deviation ({np.max(np.abs(times_diff))} ms)"
+                        )
+                        skip_times = True
+                        break
+
             if skip_times:
                 recording.reset_times()
 
