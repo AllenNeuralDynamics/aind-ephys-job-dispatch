@@ -306,7 +306,7 @@ if __name__ == "__main__":
                 if num_negative_times > 0:
                     print(f"\t\t{recording_name} - Times not monotonically increasing.")
                     if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
-                        print(f"\t\t{recording_name} - Skipping timestamps for too many negative timestamps")
+                        print(f"\t\t{recording_name} - Skipping timestamps for too many negative timestamps; {num_negative_times}")
                         skip_times = True
                         break
                     if np.max(np.abs(times_diff)) * 1000 > MAX_TIMESTAMPS_DEVIATION_MS:
