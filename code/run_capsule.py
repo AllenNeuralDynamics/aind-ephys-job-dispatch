@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 from pathlib import Path
 import json
+import logging
 
 
 # SPIKEINTERFACE
@@ -74,14 +75,14 @@ if __name__ == "__main__":
     DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
     INPUT = args.static_input or args.input
 
-    print(f"Running job dispatcher with the following parameters:")
-    print(f"\tCONCATENATE RECORDINGS: {CONCAT}")
-    print(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
-    print(f"\tDEBUG: {DEBUG}")
-    print(f"\tDEBUG DURATION: {DEBUG_DURATION}")
-    print(f"\tINPUT: {INPUT}")
+    logging.info(f"Running job dispatcher with the following parameters:")
+    logging.info(f"\tCONCATENATE RECORDINGS: {CONCAT}")
+    logging.info(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
+    logging.info(f"\tDEBUG: {DEBUG}")
+    logging.info(f"\tDEBUG DURATION: {DEBUG_DURATION}")
+    logging.info(f"\tINPUT: {INPUT}")
 
-    print(f"Parsing {INPUT} input folder")
+    logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
     if INPUT == "aind":
         # find ecephys sessions to process
@@ -92,16 +93,16 @@ if __name__ == "__main__":
             p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
         ]
         if len(ecephys_sessions) == 1:
-            ecephys_folder = ecephys_sessions[0]
+            ecephys_session_folders = ecephys_sessions[0]
             if HAVE_AIND_LOG_UTILS:
                 # look for subject.json and data_description.json files
-                subject_json = ecephys_folder / "subject.json"
+                subject_json = ecephys_session_folders / "subject.json"
                 subject_id = "undefined"
                 if subject_json.is_file():
                     subject_data = json.load(open(subject_json, "r"))
                     subject_id = subject_data["subject_id"]
 
-                data_description_json = ecephys_folder / "data_description.json"
+                data_description_json = ecephys_session_folders / "data_description.json"
                 session_name = "undefined"
                 if data_description_json.is_file():
                     data_description = json.load(open(data_description_json, "r"))
@@ -139,10 +140,10 @@ if __name__ == "__main__":
                 # uncompressed data
                 ecephys_openephys_folder = ecephys_base_folder
 
-            print(f"\tSession name: {session_name}")
-            print(f"\tOpen Ephys folder: {str(ecephys_openephys_folder)}")
+            logging.info(f"\tSession name: {session_name}")
+            logging.info(f"\tOpen Ephys folder: {str(ecephys_openephys_folder)}")
             if compressed:
-                print(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
+                logging.info(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
 
             # get blocks/experiments and streams info
             num_blocks = se.get_neo_num_blocks("openephysbinary", ecephys_openephys_folder)
@@ -155,7 +156,7 @@ if __name__ == "__main__":
             exp_ids = list(experiments.keys())
             experiment_names = [experiments[exp_id]["name"] for exp_id in sorted(exp_ids)]
 
-            print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
+            logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
             for block_index in range(num_blocks):
                 for stream_name in stream_names:
                     # skip NIDAQ and NP1-LFP streams
@@ -187,7 +188,7 @@ if __name__ == "__main__":
                                     )
                                 recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
                             except:
-                                print(f"\t\tNo LFP stream found for {exp_stream_name}")
+                                logging.info(f"\t\tNo LFP stream found for {exp_stream_name}")
 
     elif INPUT == "spikeglx":
         # get blocks/experiments and streams info
@@ -201,8 +202,8 @@ if __name__ == "__main__":
         num_blocks = 1
         block_index = 0
 
-        print(f"\tSession name: {session_name}")
-        print(f"\tNum. streams: {len(stream_names)}")
+        logging.info(f"\tSession name: {session_name}")
+        logging.info(f"\tNum. streams: {len(stream_names)}")
         for stream_name in stream_names:
             if "nidq" not in stream_name and "lf" not in stream_name:
                 recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name)
@@ -217,7 +218,7 @@ if __name__ == "__main__":
                         recording_lf = se.read_spikeglx(spikeglx_folder, stream_name=stream_name_lf)
                         recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
                     except:
-                        print(f"\t\tNo LFP stream found for {stream_name}")
+                        logging.info(f"\t\tNo LFP stream found for {stream_name}")
 
     elif INPUT == "openephys":
         # get blocks/experiments and streams info
@@ -228,8 +229,8 @@ if __name__ == "__main__":
         num_blocks = se.get_neo_num_blocks("openephysbinary", openephys_folder)
         stream_names, stream_ids = se.get_neo_streams("openephysbinary", openephys_folder)
 
-        print(f"\tSession name: {session_name}")
-        print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
+        logging.info(f"\tSession name: {session_name}")
+        logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
 
         # load first stream to map block_indices to experiment_names
         rec_test = se.read_openephys(openephys_folder, block_index=0, stream_name=stream_names[0])
@@ -259,7 +260,7 @@ if __name__ == "__main__":
                             )
                             recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
                         except:
-                            print(f"\t\tNo LFP stream found for {stream_name}")
+                            logging.info(f"\t\tNo LFP stream found for {stream_name}")
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
@@ -268,7 +269,7 @@ if __name__ == "__main__":
             nwb_files = [p for p in all_input_folders[0].iterdir() if p.name.endswith(".nwb")]
         else:
             nwb_files = [p for p in data_folder.iterdir() if p.name.endswith(".nwb")]
-        print(f"nwb_files: {nwb_files}")
+        logging.info(f"nwb_files: {nwb_files}")
         if len(nwb_files) == 0:
             raise ValueError("No NWB files found in the data folder")
         elif len(nwb_files) > 1:
@@ -282,15 +283,15 @@ if __name__ == "__main__":
 
         electrical_series_paths = se.NwbRecordingExtractor.fetch_available_electrical_series_paths(nwb_file)
 
-        print(f"\tSession name: {session_name}")
-        print(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electrical_series_paths)}")
+        logging.info(f"\tSession name: {session_name}")
+        logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electrical_series_paths)}")
         for electrical_series_path in electrical_series_paths:
             # only use paths in acquisition
             if "acquisition" in electrical_series_path:
                 stream_name = electrical_series_path.replace("/", "-")
                 recording = se.read_nwb_recording(nwb_file, electrical_series_path=electrical_series_path)
                 if recording.sampling_frequency < 10000:
-                    print(
+                    logging.info(
                         f"\t\t{electrical_series_path} is probably an LFP signal (sampling frequency: "
                         f"{recording.sampling_frequency} Hz). Skipping"
                     )
@@ -301,7 +302,7 @@ if __name__ == "__main__":
 
     # populate job dict list
     job_dict_list = []
-    print("Recording to be processed in parallel:")
+    logging.info("Recording to be processed in parallel:")
     for session_recording_name in recording_dict:
         session_name, recording_name = session_recording_name
         recording = recording_dict[session_recording_name]["raw"]
@@ -332,15 +333,15 @@ if __name__ == "__main__":
                 num_negative_times = np.sum(times_diff < 0)
 
                 if num_negative_times > 0:
-                    print(f"\t\t{recording_name} - Times not monotonically increasing.")
+                    logging.info(f"\t\t{recording_name} - Times not monotonically increasing.")
                     if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
-                        print(
+                        logging.info(
                             f"\t\t{recording_name} - Skipping timestamps for too many negative timestamps: {num_negative_times}"
                         )
                         skip_times = True
                         break
                     if np.max(np.abs(times_diff)) * 1000 > MAX_TIMESTAMPS_DEVIATION_MS:
-                        print(
+                        logging.info(
                             f"\t\t{recording_name} - Skipping timesstamps for too large deviation: {np.max(np.abs(times_diff))} ms"
                         )
                         skip_times = True
@@ -389,7 +390,7 @@ if __name__ == "__main__":
                             recursive=True, relative_to=data_folder
                         )
                         rec_str += f" (with LFP stream)"
-                    print(rec_str)
+                    logging.info(rec_str)
                     job_dict_list.append(job_dict)
             else:
                 job_dict = dict(
@@ -404,7 +405,7 @@ if __name__ == "__main__":
                 if HAS_LFP:
                     job_dict["recording_lfp_dict"] = recording_lfp.to_dict(recursive=True, relative_to=data_folder)
                     rec_str += f" (with LFP stream)"
-                print(rec_str)
+                logging.info(rec_str)
                 job_dict_list.append(job_dict)
 
     if not results_folder.is_dir():
@@ -413,4 +414,4 @@ if __name__ == "__main__":
     for i, job_dict in enumerate(job_dict_list):
         with open(results_folder / f"job_{i}.json", "w") as f:
             json.dump(job_dict, f, indent=4, cls=SIJsonEncoder)
-    print(f"Generated {len(job_dict_list)} job config files")
+    logging.info(f"Generated {len(job_dict_list)} job config files")
