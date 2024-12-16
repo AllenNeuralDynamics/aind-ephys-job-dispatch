@@ -16,6 +16,13 @@ import spikeinterface.extractors as se
 
 from spikeinterface.core.core_tools import SIJsonEncoder
 
+try:
+    from aind_log_utils import log
+
+    HAVE_AIND_LOG_UTILS = True
+except ImportError:
+    HAVE_AIND_LOG_UTILS = False
+
 
 MAX_NUM_NEGATIVE_TIMESTAMPS = 10
 MAX_TIMESTAMPS_DEVIATION_MS = 1
@@ -84,6 +91,27 @@ if __name__ == "__main__":
         ecephys_sessions = [
             p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
         ]
+        if len(ecephys_sessions) == 1:
+            ecephys_folder = ecephys_sessions[0]
+            if HAVE_AIND_LOG_UTILS:
+                # look for subject.json and data_description.json files
+                subject_json = ecephys_folder / "subject.json"
+                subject_id = "undefined"
+                if subject_json.is_file():
+                    subject_data = json.load(open(subject_json, "r"))
+                    subject_id = subject_data["subject_id"]
+
+                data_description_json = ecephys_folder / "data_description.json"
+                session_name = "undefined"
+                if data_description_json.is_file():
+                    data_description = json.load(open(data_description_json, "r"))
+                    session_name = data_description["name"]
+
+                log.setup_logging(
+                    "Job Dispatch Ecephys",
+                    mouse_id=subject_id,
+                    session_name=session_name,
+                )
 
         for session_folder in ecephys_sessions:
             session_name = None
@@ -306,7 +334,9 @@ if __name__ == "__main__":
                 if num_negative_times > 0:
                     print(f"\t\t{recording_name} - Times not monotonically increasing.")
                     if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
-                        print(f"\t\t{recording_name} - Skipping timestamps for too many negative timestamps: {num_negative_times}")
+                        print(
+                            f"\t\t{recording_name} - Skipping timestamps for too many negative timestamps: {num_negative_times}"
+                        )
                         skip_times = True
                         break
                     if np.max(np.abs(times_diff)) * 1000 > MAX_TIMESTAMPS_DEVIATION_MS:
