@@ -370,7 +370,7 @@ if __name__ == "__main__":
                         recording_lfp_one = si.split_recording(recording_lfp)[segment_index]
                         recording_lfp_one = recording_lfp_one.frame_slice(
                             start_frame=0,
-                            end_frame=min(int(DEBUG_DURATION * recording_lfp.sampling_frequency), recording_lfp_one,get_num_samples())
+                            end_frame=min(int(DEBUG_DURATION * recording_lfp.sampling_frequency), recording_lfp_one.get_num_samples())
                         )
                         recording_lfp_list.append(recording_lfp_one)
                     recording_lfp = si.append_recordings(recording_lfp_list)
