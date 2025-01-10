@@ -5,6 +5,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # GENERAL IMPORTS
 import argparse
+import sys
 import numpy as np
 from pathlib import Path
 import json
@@ -107,7 +108,7 @@ if __name__ == "__main__":
             raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
 
     if not aind_log_setup:
-        logging.basicConfig(level=logging.INFO, format="%(message)s")
+        logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 
     logging.info(f"Running job dispatcher with the following parameters:")
     logging.info(f"\tCONCATENATE RECORDINGS: {CONCAT}")
