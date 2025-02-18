@@ -26,9 +26,11 @@ except ImportError:
     HAVE_AIND_LOG_UTILS = False
 
 
-MAX_NUM_NEGATIVE_TIMESTAMPS = 10
-MAX_TIMESTAMPS_DEVIATION_MS = 1
-
+# here we define some constants used for defining if timestamps are ok
+# or should be skipped
+ACCEPTED_NEGATIVE_DEVIATION_MS = 0.2  # we allow for small negative timestamps diff glitches
+MAX_NUM_NEGATIVE_TIMESTAMPS = 10  # maximum number of negative timestamps allowed below the accepted deviation
+ABS_MAX_TIMESTAMPS_DEVIATION_MS = 2  # absolute maximum deviation allowed for timestamps (also positive)
 
 data_folder = Path("../data")
 results_folder = Path("../results")
@@ -64,6 +66,12 @@ input_help = "Which 'loader' to use (aind | spikeglx | nwb)"
 input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "openephys", "nwb"])
 input_group.add_argument("static_input", nargs="?", help=input_help)
 
+timestamps_skip_group = parser.add_mutually_exclusive_group()
+timestamps_skip_help = "Skip timestamps check"
+timestamps_skip_group.add_argument("--skip-timestamps-check", action="store_true", help=timestamps_skip_help)
+timestamps_skip_group.add_argument(
+    "static_skip_timestamps_check", nargs="?", default="false", help=timestamps_skip_help
+)
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -75,6 +83,11 @@ if __name__ == "__main__":
     DEBUG = args.debug or args.static_debug.lower() == "true"
     DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
     INPUT = args.static_input or args.input
+    SKIP_TIMESTAMPS_CHECK = (
+        True
+        if args.static_skip_timestamps_check and args.static_skip_timestamp_check.lower() == "true"
+        else args.skip_timestamps_check
+    )
 
     # setup AIND logging before any other logging call
     aind_log_setup = False
@@ -116,6 +129,7 @@ if __name__ == "__main__":
     logging.info(f"\tDEBUG: {DEBUG}")
     logging.info(f"\tDEBUG DURATION: {DEBUG_DURATION}")
     logging.info(f"\tINPUT: {INPUT}")
+    logging.info(f"\tSKIP TIMESTAMPS CHECK: {SKIP_TIMESTAMPS_CHECK}")
 
     logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
@@ -188,9 +202,7 @@ if __name__ == "__main__":
                                     ecephys_openephys_folder, stream_name=stream_name_lf, block_index=block_index
                                 )
                             else:
-                                recording_lf = si.read_zarr(
-                                    ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr"
-                                )
+                                recording_lf = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr")
                             recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
                         except:
                             logging.info(f"\t\tNo LFP stream found for {exp_stream_name}")
@@ -332,25 +344,27 @@ if __name__ == "__main__":
 
             # timestamps should be monotonically increasing, but we allow for small glitches
             skip_times = False
-            for segment_index in range(recording.get_num_segments()):
-                times = recording.get_times(segment_index=segment_index)
-                times_diff = np.diff(times)
-                num_negative_times = np.sum(times_diff < 0)
+            if not SKIP_TIMESTAMPS_CHECK:
+                for segment_index in range(recording.get_num_segments()):
+                    times = recording.get_times(segment_index=segment_index)
+                    times_diff_ms = np.diff(times) * 1000
+                    num_negative_times = np.sum(times_diff_ms < -ACCEPTED_NEGATIVE_DEVIATION_MS)
 
-                if num_negative_times > 0:
-                    logging.info(f"\t\t{recording_name} - Times not monotonically increasing.")
-                    if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
-                        logging.info(
-                            f"\t\t{recording_name} - Skipping timestamps for too many negative timestamps: {num_negative_times}"
-                        )
-                        skip_times = True
-                        break
-                    if np.max(np.abs(times_diff)) * 1000 > MAX_TIMESTAMPS_DEVIATION_MS:
-                        logging.info(
-                            f"\t\t{recording_name} - Skipping timesstamps for too large deviation: {np.max(np.abs(times_diff))} ms"
-                        )
-                        skip_times = True
-                        break
+                    if num_negative_times > 0:
+                        logging.info(f"\t\t{recording_name} - Times not monotonically increasing.")
+                        if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
+                            logging.info(
+                                f"\t\t{recording_name} - Skipping timestamps for too many negative timestamps: {num_negative_times}"
+                            )
+                            skip_times = True
+                            break
+                        max_time_diff_ms = np.max(np.abs(times_diff_ms))
+                        if max_time_diff_ms > ABS_MAX_TIMESTAMPS_DEVIATION_MS:
+                            logging.info(
+                                f"\t\t{recording_name} - Skipping timesstamps for too large deviation: {max_time_diff_ms} ms"
+                            )
+                            skip_times = True
+                            break
 
             if skip_times:
                 recording.reset_times()
@@ -361,7 +375,9 @@ if __name__ == "__main__":
                     recording_one = si.split_recording(recording)[segment_index]
                     recording_one = recording_one.frame_slice(
                         start_frame=0,
-                        end_frame=min(int(DEBUG_DURATION * recording.sampling_frequency), recording_one.get_num_samples())
+                        end_frame=min(
+                            int(DEBUG_DURATION * recording.sampling_frequency), recording_one.get_num_samples()
+                        ),
                     )
                     recording_list.append(recording_one)
                 recording = si.append_recordings(recording_list)
@@ -371,7 +387,10 @@ if __name__ == "__main__":
                         recording_lfp_one = si.split_recording(recording_lfp)[segment_index]
                         recording_lfp_one = recording_lfp_one.frame_slice(
                             start_frame=0,
-                            end_frame=min(int(DEBUG_DURATION * recording_lfp.sampling_frequency), recording_lfp_one.get_num_samples())
+                            end_frame=min(
+                                int(DEBUG_DURATION * recording_lfp.sampling_frequency),
+                                recording_lfp_one.get_num_samples(),
+                            ),
                         )
                         recording_lfp_list.append(recording_lfp_one)
                     recording_lfp = si.append_recordings(recording_lfp_list)
