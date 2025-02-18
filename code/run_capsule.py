@@ -7,6 +7,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 import argparse
 import sys
 import numpy as np
+import warnings
 from pathlib import Path
 import json
 import logging
@@ -31,6 +32,10 @@ except ImportError:
 ACCEPTED_NEGATIVE_DEVIATION_MS = 0.2  # we allow for small negative timestamps diff glitches
 MAX_NUM_NEGATIVE_TIMESTAMPS = 10  # maximum number of negative timestamps allowed below the accepted deviation
 ABS_MAX_TIMESTAMPS_DEVIATION_MS = 2  # absolute maximum deviation allowed for timestamps (also positive)
+
+MAX_NUM_NEGATIVE_TIMESTAMPS = 10
+MAX_TIMESTAMPS_DEVIATION_MS = 1
+
 
 data_folder = Path("../data")
 results_folder = Path("../results")

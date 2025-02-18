@@ -1,4 +1,4 @@
-# hash:sha256:5b6c860e32775c435662c7c478e8dc2cec981c0fb84880af339fa32a7f75bf3d
+# hash:sha256:3e15cc7c66b17276f6173c135c68a4f96e0f633a2895ff9acbd49828801c3058
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/jupyterlab:3.6.1-miniconda4.12.0-python3.9-ubuntu20.04
 
@@ -17,3 +17,6 @@ RUN pip install -U --no-cache-dir \
     pynwb==2.8.0 \
     spikeinterface[full]==0.101.2 \
     wavpack-numcodecs==0.2.1
+
+COPY postInstall /
+RUN /postInstall
