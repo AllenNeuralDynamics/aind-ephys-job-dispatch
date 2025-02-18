@@ -18,5 +18,3 @@ RUN pip install -U --no-cache-dir \
     spikeinterface[full]==0.101.2 \
     wavpack-numcodecs==0.2.1
 
-COPY postInstall /
-RUN /postInstall
