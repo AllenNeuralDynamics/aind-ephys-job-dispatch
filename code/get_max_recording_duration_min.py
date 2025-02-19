@@ -1,6 +1,7 @@
 """
 Print the maximum recording duration in minutes.
 """
+
 from pathlib import Path
 import json
 import numpy as np
