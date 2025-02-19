@@ -17,4 +17,3 @@ RUN pip install -U --no-cache-dir \
     pynwb==2.8.0 \
     spikeinterface[full]==0.101.2 \
     wavpack-numcodecs==0.2.1
-
