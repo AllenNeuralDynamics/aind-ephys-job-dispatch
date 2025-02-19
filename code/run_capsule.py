@@ -90,7 +90,7 @@ if __name__ == "__main__":
     INPUT = args.static_input or args.input
     SKIP_TIMESTAMPS_CHECK = (
         True
-        if args.static_skip_timestamps_check and args.static_skip_timestamp_check.lower() == "true"
+        if args.static_skip_timestamps_check and args.static_skip_timestamps_check.lower() == "true"
         else args.skip_timestamps_check
     )
 
@@ -355,21 +355,20 @@ if __name__ == "__main__":
                     times_diff_ms = np.diff(times) * 1000
                     num_negative_times = np.sum(times_diff_ms < -ACCEPTED_NEGATIVE_DEVIATION_MS)
 
-                    if num_negative_times > 0:
-                        logging.info(f"\t\t{recording_name} - Times not monotonically increasing.")
-                        if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
-                            logging.info(
-                                f"\t\t{recording_name} - Skipping timestamps for too many negative timestamps: {num_negative_times}"
-                            )
-                            skip_times = True
-                            break
-                        max_time_diff_ms = np.max(np.abs(times_diff_ms))
-                        if max_time_diff_ms > ABS_MAX_TIMESTAMPS_DEVIATION_MS:
-                            logging.info(
-                                f"\t\t{recording_name} - Skipping timesstamps for too large deviation: {max_time_diff_ms} ms"
-                            )
-                            skip_times = True
-                            break
+                    if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
+                        logging.info(
+                            f"\t{recording_name}:\n\t\tSkipping timestamps for too many negative "
+                            f"timestamps diffs below {ACCEPTED_NEGATIVE_DEVIATION_MS}: {num_negative_times}"
+                        )
+                        skip_times = True
+                        break
+                    max_time_diff_ms = np.max(np.abs(times_diff_ms))
+                    if max_time_diff_ms > ABS_MAX_TIMESTAMPS_DEVIATION_MS:
+                        logging.info(
+                            f"\t{recording_name}: Skipping timestamps for too large time diff deviation: {max_time_diff_ms} ms"
+                        )
+                        skip_times = True
+                        break
 
             if skip_times:
                 recording.reset_times()
@@ -414,7 +413,7 @@ if __name__ == "__main__":
                         duration=duration,
                         debug=DEBUG,
                     )
-                    rec_str = f"\t{recording_name_group} - Duration: {duration} s - Num. channels: {recording_group.get_num_channels()}"
+                    rec_str = f"\t{recording_name_group}\n\t\tDuration {duration} s - Num. channels: {recording_group.get_num_channels()}"
                     if HAS_LFP:
                         recording_lfp_group = recording_lfp.split_by("group")[group_name]
                         job_dict["recording_lfp_dict"] = recording_lfp_group.to_dict(
@@ -432,7 +431,7 @@ if __name__ == "__main__":
                     duration=duration,
                     debug=DEBUG,
                 )
-                rec_str = f"\t{recording_name_segment} - Duration: {duration} s - Num. channels: {recording.get_num_channels()}"
+                rec_str = f"\t{recording_name_segment}\n\t\tDuration: {duration} s - Num. channels: {recording.get_num_channels()}"
                 if HAS_LFP:
                     job_dict["recording_lfp_dict"] = recording_lfp.to_dict(recursive=True, relative_to=data_folder)
                     rec_str += f" (with LFP stream)"
