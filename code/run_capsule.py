@@ -365,7 +365,7 @@ if __name__ == "__main__":
                     max_time_diff_ms = np.max(np.abs(times_diff_ms))
                     if max_time_diff_ms > ABS_MAX_TIMESTAMPS_DEVIATION_MS:
                         logging.info(
-                            f"\t{recording_name}: Skipping timestamps for too large time diff deviation: {max_time_diff_ms} ms"
+                            f"\t{recording_name}:\n\t\tSkipping timestamps for too large time diff deviation: {max_time_diff_ms} ms"
                         )
                         skip_times = True
                         break
