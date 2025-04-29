@@ -66,16 +66,37 @@ debug_duration_help = (
 debug_duration_group.add_argument("--debug-duration", default=30, help=debug_duration_help)
 debug_duration_group.add_argument("static_debug_duration", nargs="?", default=None, help=debug_duration_help)
 
-input_group = parser.add_mutually_exclusive_group()
-input_help = "Which 'loader' to use (aind | spikeglx | nwb)"
-input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "openephys", "nwb"])
-input_group.add_argument("static_input", nargs="?", help=input_help)
-
 timestamps_skip_group = parser.add_mutually_exclusive_group()
 timestamps_skip_help = "Skip timestamps check"
 timestamps_skip_group.add_argument("--skip-timestamps-check", action="store_true", help=timestamps_skip_help)
 timestamps_skip_group.add_argument(
     "static_skip_timestamps_check", nargs="?", default="false", help=timestamps_skip_help
+)
+
+input_group = parser.add_mutually_exclusive_group()
+input_help = "Which 'loader' to use (aind | spikeglx | openephys | nwb | spikeinterface)"
+input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "openephys", "nwb"])
+input_group.add_argument("static_input", nargs="?", help=input_help)
+
+spikeinterface_info_group = parser.add_mutually_exclusive_group()
+spikeinterface_info_help = """
+    A JSON path or string to specify how to parse the recording in spikeinterface, including: 
+    - 1. reader_type (required): string with the reader type (e.g. 'plexon', 'neuralynx', etc.) .
+    - 2. reader_kwargs (optional): dictionary with the reader kwargs (e.g. {'folder': '/path/to/folder'}).
+    - 3. probe_path (optional): string with the probe path to a ProbeInterface JSON file (e.g. '/path/to/probe.json').
+    If reader_kwargs is not provided, the reader will be created with default parameters. The probe_path is 
+    required if the reader doesn't load the probe automatically.
+"""
+spikeinterface_info_group.add_argument(
+    "--spikeinterface-info",
+    default=None,
+    help=spikeinterface_info_help,
+)
+spikeinterface_info_group.add_argument(
+    "static_spikeinterface_info",
+    nargs="?",
+    default=None,
+    help=spikeinterface_info_help,
 )
 
 if __name__ == "__main__":
@@ -87,12 +108,15 @@ if __name__ == "__main__":
     )
     DEBUG = args.debug or args.static_debug.lower() == "true"
     DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
-    INPUT = args.static_input or args.input
     SKIP_TIMESTAMPS_CHECK = (
         True
         if args.static_skip_timestamps_check and args.static_skip_timestamps_check.lower() == "true"
         else args.skip_timestamps_check
     )
+    INPUT = args.static_input or args.input
+    if INPUT == "spikeinterface":
+        spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
+        assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
 
     # setup AIND logging before any other logging call
     aind_log_setup = False
@@ -318,6 +342,44 @@ if __name__ == "__main__":
                         f"{recording.sampling_frequency} Hz). Skipping"
                     )
                     continue
+                recording_name = f"block{block_index}_{stream_name}_recording"
+                recording_dict[(session_name, recording_name)] = {}
+                recording_dict[(session_name, recording_name)]["raw"] = recording
+
+    elif INPUT == "spikeinterface":
+        from spikeinterface.extractors import recording_extractor_full_dict, neo_recording_extractors_list
+        from probeinterface import read_probeinterface
+
+        if Path(spikeinterface_info).is_file():
+            with open(spikeinterface_info, "r") as f:
+                spikeinterface_info = json.load(f)
+        elif isinstance(spikeinterface_info, str):
+            spikeinterface_info = json.loads(spikeinterface_info)
+
+        reader_type = spikeinterface_info.get("reader_type", None)
+        assert reader_type is not None, "Reader type is required"
+        assert reader_type in recording_extractor_full_dict, f"Reader type {reader_type} not supported"
+        reader_kwargs = spikeinterface_info.get("reader_kwargs", None)
+        probe_path = spikeinterface_info.get("probe_path", None)
+        session_name = "session"
+
+        # check if it's a neo reader
+        if recording_extractor_full_dict[reader_type] in neo_recording_extractors_list:
+            num_blocks = se.get_neo_num_blocks(reader_type, **reader_kwargs)
+            stream_names, stream_ids = se.get_neo_streams(reader_type, **reader_kwargs)
+        else:
+            num_blocks = 1
+            stream_names = [None]
+        for block_index in range(num_blocks):
+            for stream_name in stream_names:
+                if stream_name is not None:
+                    reader_kwargs["stream_name"] = stream_name
+                recording = recording_extractor_full_dict[reader_type](**reader_kwargs)
+                if probe_path is not None:
+                    probegroup = read_probeinterface(probe_path)
+                    recording = recording.set_probegroup(probegroup)
+                probegroup = recording.get_probegroup()
+                assert probegroup is not None, "Probe group is required"
                 recording_name = f"block{block_index}_{stream_name}_recording"
                 recording_dict[(session_name, recording_name)] = {}
                 recording_dict[(session_name, recording_name)]["raw"] = recording
