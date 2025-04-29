@@ -75,7 +75,7 @@ timestamps_skip_group.add_argument(
 
 input_group = parser.add_mutually_exclusive_group()
 input_help = "Which 'loader' to use (aind | spikeglx | openephys | nwb | spikeinterface)"
-input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "openephys", "nwb"])
+input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
 input_group.add_argument("static_input", nargs="?", help=input_help)
 
 spikeinterface_info_group = parser.add_mutually_exclusive_group()
@@ -83,7 +83,10 @@ spikeinterface_info_help = """
     A JSON path or string to specify how to parse the recording in spikeinterface, including: 
     - 1. reader_type (required): string with the reader type (e.g. 'plexon', 'neuralynx', etc.) .
     - 2. reader_kwargs (optional): dictionary with the reader kwargs (e.g. {'folder': '/path/to/folder'}).
-    - 3. probe_path (optional): string with the probe path to a ProbeInterface JSON file (e.g. '/path/to/probe.json').
+    - 3. keep_stream_substrings (optional): string or list of strings with the stream names to load (e.g. 'AP' or ['AP', 'LFP']).
+    - 4. skip_stream_substrings (optional): string (or list of strings) with substrings used to skip streams (e.g. 'NIDQ' or ['USB', 'EVTS']).
+    - 5. probe_paths (optional): string or dict the probe paths to a ProbeInterface JSON file (e.g. '/path/to/probe.json'). 
+                                 If a dict is provided, the key is the stream name and the value is the probe path.
     If reader_kwargs is not provided, the reader will be created with default parameters. The probe_path is 
     required if the reader doesn't load the probe automatically.
 """
@@ -360,8 +363,20 @@ if __name__ == "__main__":
         assert reader_type is not None, "Reader type is required"
         assert reader_type in recording_extractor_full_dict, f"Reader type {reader_type} not supported"
         reader_kwargs = spikeinterface_info.get("reader_kwargs", None)
-        probe_path = spikeinterface_info.get("probe_path", None)
+        keep_stream_substrings = spikeinterface_info.get("keep_stream_substrings", None)
+        skip_stream_substrings = spikeinterface_info.get("skip_stream_substrings", None)
+        probe_paths = spikeinterface_info.get("probe_paths", None)
         session_name = "session"
+
+        if keep_stream_substrings is not None:
+            assert skip_stream_substrings is None, "You cannot use both keep_stream_substrings and skip_stream_substrings"
+            if isinstance(keep_stream_substrings, str):
+                keep_stream_substrings = [keep_stream_substrings]
+
+        if skip_stream_substrings is not None:
+            assert keep_stream_substrings is None, "You cannot use both keep_stream_substrings and skip_stream_substrings"
+            if isinstance(skip_stream_substrings, str):
+                skip_stream_substrings = [skip_stream_substrings]
 
         # check if it's a neo reader
         if recording_extractor_full_dict[reader_type] in neo_recording_extractors_list:
@@ -373,13 +388,31 @@ if __name__ == "__main__":
         for block_index in range(num_blocks):
             for stream_name in stream_names:
                 if stream_name is not None:
+                    if keep_stream_substrings is not None:
+                        if not any(s in stream_name for s in keep_stream_substrings):
+                            logging.info(f"\tSkipping stream {stream_name} (keep substrings: {keep_stream_substrings})")
+                            continue
+                    if skip_stream_substrings is not None:
+                        if any(s in stream_name for s in skip_stream_substrings):
+                            logging.info(f"\tSkipping stream {stream_name} (skip substrings: {skip_stream_substrings})")
+                            continue
                     reader_kwargs["stream_name"] = stream_name
+                logging.info(f"\tStream name: {stream_name}")
                 recording = recording_extractor_full_dict[reader_type](**reader_kwargs)
+                probe_path = None
+                if probe_paths is not None:
+                    if isinstance(probe_paths, str):
+                        probe_path = probe_paths
+                    elif isinstance(probe_paths, dict):
+                        probe_path = probe_paths.get(stream_name, None)
                 if probe_path is not None:
                     probegroup = read_probeinterface(probe_path)
                     recording = recording.set_probegroup(probegroup)
                 probegroup = recording.get_probegroup()
-                assert probegroup is not None, "Probe group is required"
+                assert probegroup is not None, (
+                    f"Probe not specified for {stream_name}. "
+                    f"Use the 'probe_paths' field of spikeinterface-info to specify it."
+                )
                 recording_name = f"block{block_index}_{stream_name}_recording"
                 recording_dict[(session_name, recording_name)] = {}
                 recording_dict[(session_name, recording_name)]["raw"] = recording
