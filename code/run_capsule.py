@@ -74,8 +74,8 @@ timestamps_skip_group.add_argument(
 )
 
 input_group = parser.add_mutually_exclusive_group()
-input_help = "Which 'loader' to use (aind | spikeglx | openephys | nwb | spikeinterface)"
-input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
+input_help = "Which 'loader' to use (spikeglx | openephys | nwb | spikeinterface | aind)"
+input_group.add_argument("--input", default=None, help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
 input_group.add_argument("static_input", nargs="?", help=input_help)
 
 spikeinterface_info_group = parser.add_mutually_exclusive_group()
@@ -102,24 +102,47 @@ spikeinterface_info_group.add_argument(
     help=spikeinterface_info_help,
 )
 
+parser.add_argument("--params", default=None, help="Path to the parameters file or JSON string. If given, it will override all other arguments.")
+
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
-    SPLIT_GROUPS = (
-        True if args.static_split_groups and args.static_split_groups.lower() == "true" else args.split_groups
-    )
-    DEBUG = args.debug or args.static_debug.lower() == "true"
-    DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
-    SKIP_TIMESTAMPS_CHECK = (
-        True
-        if args.static_skip_timestamps_check and args.static_skip_timestamps_check.lower() == "true"
-        else args.skip_timestamps_check
-    )
-    INPUT = args.static_input or args.input
-    if INPUT == "spikeinterface":
-        spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
-        assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
+    # if params is given, override all other arguments
+    PARAMS = args.params
+    if PARAMS is not None:
+        if Path(PARAMS).is_file():
+            with open(PARAMS, "r") as f:
+                params = json.load(f)
+        else:
+            params = json.loads(PARAMS)
+
+        CONCAT = params.get("concatenate", False)
+        SPLIT_GROUPS = params.get("split_groups", True)
+        DEBUG = params.get("debug", False)
+        DEBUG_DURATION = float(params.get("debug_duration"))
+        SKIP_TIMESTAMPS_CHECK = params.get("skip_timestamps_check", False)
+        INPUT = params.get("input")
+        assert INPUT is not None, "Input type is required"
+        if INPUT == "spikeinterface":
+            spikeinterface_info = params.get("spikeinterface_info")
+            assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
+    else:
+        # if params is not given, use the arguments
+        CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
+        SPLIT_GROUPS = (
+            True if args.static_split_groups and args.static_split_groups.lower() == "true" else args.split_groups
+        )
+        DEBUG = args.debug or args.static_debug.lower() == "true"
+        DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
+        SKIP_TIMESTAMPS_CHECK = (
+            True
+            if args.static_skip_timestamps_check and args.static_skip_timestamps_check.lower() == "true"
+            else args.skip_timestamps_check
+        )
+        INPUT = args.static_input or args.input
+        if INPUT == "spikeinterface":
+            spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
+            assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
 
     # setup AIND logging before any other logging call
     aind_log_setup = False
@@ -353,7 +376,10 @@ if __name__ == "__main__":
         from spikeinterface.extractors import recording_extractor_full_dict, neo_recording_extractors_list
         from probeinterface import read_probeinterface
 
-        if Path(spikeinterface_info).is_file():
+        if isinstance(spikeinterface_info, dict):
+            # spikeinterface_info already provided as a dict with a JSON file/string
+            pass
+        elif Path(spikeinterface_info).is_file():
             with open(spikeinterface_info, "r") as f:
                 spikeinterface_info = json.load(f)
         elif isinstance(spikeinterface_info, str):
