@@ -96,41 +96,46 @@ if __name__ == "__main__":
 
     # setup AIND logging before any other logging call
     aind_log_setup = False
+    remap_with_session_name = False
+
     if INPUT == "aind":
-        all_folders = [
-            p for p in data_folder.iterdir() if p.is_dir()
-        ]
-        print(f"All folders:\n{all_folders}")
-        ecephys_sessions = [
-            p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
-        ]
-        print(f"Ecephys sessions:\n{ecephys_sessions}")
-        if len(ecephys_sessions) == 1:
-            ecephys_session_folder = ecephys_sessions[0]
-            if HAVE_AIND_LOG_UTILS:
-                # look for subject.json and data_description.json files
-                subject_json = ecephys_session_folder / "subject.json"
-                subject_id = "undefined"
-                if subject_json.is_file():
-                    subject_data = json.load(open(subject_json, "r"))
-                    subject_id = subject_data["subject_id"]
-
-                data_description_json = ecephys_session_folder / "data_description.json"
-                session_name = "undefined"
-                if data_description_json.is_file():
-                    data_description = json.load(open(data_description_json, "r"))
-                    session_name = data_description["name"]
-
-                log.setup_logging(
-                    "Job Dispatch Ecephys",
-                    subject_id=subject_id,
-                    asset_name=session_name,
-                )
-                aind_log_setup = True
+        if (data_folder / "data_description.json").is_file():
+            # For pipelines using combined assets, the session data is in data folder
+            ecephys_session_folder = data_folder
+            remap_with_session_name = True
         else:
-            raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
+            ecephys_sessions = [
+                p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
+            ]
+            if len(ecephys_sessions) == 1:
+                ecephys_session_folder = ecephys_sessions[0]
+            elif len(ecephys_sessions) == 0:
+                raise Exception("No valid ecephys sessions found.")
+            else:
+                raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
 
-    if not aind_log_setup:
+
+    if HAVE_AIND_LOG_UTILS:
+        # look for subject.json and data_description.json files
+        subject_json = ecephys_session_folder / "subject.json"
+        subject_id = "undefined"
+        if subject_json.is_file():
+            subject_data = json.load(open(subject_json, "r"))
+            subject_id = subject_data["subject_id"]
+
+        data_description_json = ecephys_session_folder / "data_description.json"
+        session_name = "undefined"
+        if data_description_json.is_file():
+            data_description = json.load(open(data_description_json, "r"))
+            session_name = data_description["name"]
+
+        log.setup_logging(
+            "Job Dispatch Ecephys",
+            subject_id=subject_id,
+            asset_name=session_name,
+        )
+        aind_log_setup = True
+    else:
         logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 
     logging.info(f"Running job dispatcher with the following parameters:")
@@ -447,6 +452,25 @@ if __name__ == "__main__":
         results_folder.mkdir(parents=True)
 
     for i, job_dict in enumerate(job_dict_list):
+        if remap_with_session_name:
+            for rec_field in ["recording_dict", "recording_lfp_dict"]:
+                # here we remap the dictionary to add a /session_name subfolder
+                recording_dict = job_dict.get(rec_field)
+                if recording_dict is not None:
+                    access_path, path_name, current_value = None, None, None
+                    path_list_iter = extractor_dict_iterator(recording_dict)
+                    for path_iter in path_list_iter:
+                        if "folder_path" in path_iter.name or "file_path" in path_iter.name:
+                            access_path = path_iter.access_path
+                            current_value = path_iter.value
+                            path_name = path_iter.name
+                            break
+                    if access_path is not None:
+                        new_value = str(Path(current_value) / session_name)
+                        logging.info(f"Remapping {path_name} field from {current_value} to {new_value}")
+                        set_value_in_extractor_dict(recording_dict, access_path, new_value)
+                        job_dict[rec_field] = recording_dict
+
         with open(results_folder / f"job_{i}.json", "w") as f:
             json.dump(job_dict, f, indent=4, cls=SIJsonEncoder)
     logging.info(f"Generated {len(job_dict_list)} job config files")
