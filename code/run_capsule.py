@@ -17,7 +17,8 @@ import logging
 import spikeinterface as si
 import spikeinterface.extractors as se
 
-from spikeinterface.core.core_tools import SIJsonEncoder
+from spikeinterface.core.core_tools import SIJsonEncoder, extractor_dict_iterator, set_value_in_extractor_dict
+
 
 try:
     from aind_log_utils import log
@@ -453,6 +454,7 @@ if __name__ == "__main__":
 
     for i, job_dict in enumerate(job_dict_list):
         if remap_with_session_name:
+
             for rec_field in ["recording_dict", "recording_lfp_dict"]:
                 # here we remap the dictionary to add a /session_name subfolder
                 recording_dict = job_dict.get(rec_field)
