@@ -97,9 +97,14 @@ if __name__ == "__main__":
     # setup AIND logging before any other logging call
     aind_log_setup = False
     if INPUT == "aind":
+        all_folders = [
+            p for p in data_folder.iterdir() if p.is_dir()
+        ]
+        print(f"All folders:\n{all_folders}")
         ecephys_sessions = [
             p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
         ]
+        print(f"Ecephys sessions:\n{ecephys_sessions}")
         if len(ecephys_sessions) == 1:
             ecephys_session_folder = ecephys_sessions[0]
             if HAVE_AIND_LOG_UTILS:
