@@ -28,8 +28,14 @@ The `code/run` script takes 2 arguments:
 
 ```bash
   --concatenate         Whether to concatenate recordings (segments) or not. Default: False
-  --input {aind,spikeglx,nwb}
+  --no-split-groups     Whether to process different groups separately
+  --debug               Whether to run in DEBUG mode
+  --debug-duration DEBUG_DURATION
+                        Duration of clipped recording in debug mode. Default is 30 seconds. Only used if debug is enabled
+  --input {aind,spikeglx,openephys,nwb}
                         Which 'loader' to use (aind | spikeglx | nwb)
+  --skip-timestamps-check
+                        Skip timestamps check
 ```
 
 ### Output
