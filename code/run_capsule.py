@@ -50,18 +50,18 @@ concat_group.add_argument("--concatenate", action="store_true", help=concat_help
 concat_group.add_argument("static_concatenate", nargs="?", default="false", help=concat_help)
 
 split_group = parser.add_mutually_exclusive_group()
-split_help = "Whether to process different groups separately"
+split_help = "Whether to process different groups separately. Default: split groups"
 split_group.add_argument("--no-split-groups", action="store_true", help=split_help)
 split_group.add_argument("static_split_groups", nargs="?", default="false", help=split_help)
 
 debug_group = parser.add_mutually_exclusive_group()
-debug_help = "Whether to run in DEBUG mode"
+debug_help = "Whether to run in DEBUG mode. Default: False"
 debug_group.add_argument("--debug", action="store_true", help=debug_help)
 debug_group.add_argument("static_debug", nargs="?", default="false", help=debug_help)
 
 debug_duration_group = parser.add_mutually_exclusive_group()
 debug_duration_help = (
-    "Duration of clipped recording in debug mode. Default is 30 seconds. Only used if debug is enabled"
+    "Duration of clipped recording in debug mode. Only used if debug is enabled. Default: 30 seconds"
 )
 debug_duration_group.add_argument("--debug-duration", default=30, help=debug_duration_help)
 debug_duration_group.add_argument("static_debug_duration", nargs="?", default=None, help=debug_duration_help)
@@ -72,7 +72,7 @@ input_group.add_argument("--input", default="aind", help=input_help, choices=["a
 input_group.add_argument("static_input", nargs="?", help=input_help)
 
 timestamps_skip_group = parser.add_mutually_exclusive_group()
-timestamps_skip_help = "Skip timestamps check"
+timestamps_skip_help = "Skip timestamps check. Default: False"
 timestamps_skip_group.add_argument("--skip-timestamps-check", action="store_true", help=timestamps_skip_help)
 timestamps_skip_group.add_argument(
     "static_skip_timestamps_check", nargs="?", default="false", help=timestamps_skip_help
