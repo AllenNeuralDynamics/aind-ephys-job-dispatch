@@ -51,7 +51,7 @@ concat_group.add_argument("static_concatenate", nargs="?", default="false", help
 
 split_group = parser.add_mutually_exclusive_group()
 split_help = "Whether to process different groups separately"
-split_group.add_argument("--split-groups", action="store_true", help=split_help)
+split_group.add_argument("--no-split-groups", action="store_true", help=split_help)
 split_group.add_argument("static_split_groups", nargs="?", default="false", help=split_help)
 
 debug_group = parser.add_mutually_exclusive_group()
@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
     CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
     SPLIT_GROUPS = (
-        True if args.static_split_groups and args.static_split_groups.lower() == "true" else args.split_groups
+        True if args.static_split_groups and args.static_split_groups.lower() == "true" else not args.no_split_groups
     )
     DEBUG = args.debug or args.static_debug.lower() == "true"
     DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
