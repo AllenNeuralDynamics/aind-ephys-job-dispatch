@@ -456,7 +456,7 @@ if __name__ == "__main__":
         if remap_with_session_name:
 
             for rec_field in ["recording_dict", "recording_lfp_dict"]:
-                # here we remap the dictionary to add a /session_name/ subfolder
+                # here we remap the dictionary to prepemd a /session_name/ subfolder
                 recording_dict = job_dict.get(rec_field)
                 if recording_dict is not None:
                     access_path, path_name, current_value = None, None, None
@@ -464,11 +464,11 @@ if __name__ == "__main__":
                     for path_iter in path_list_iter:
                         if "folder_path" in path_iter.name or "file_path" in path_iter.name:
                             access_path = path_iter.access_path
-                            current_value = Path(path_iter.value)
+                            current_value = path_iter.value
                             path_name = path_iter.name
                             break
                     if access_path is not None:
-                        new_value = str(current_value.parent / session_name / current_value.name)
+                        new_value = str(Path(session_name) / current_value)
                         logging.info(f"Remapping {path_name} field from {current_value} to {new_value}")
                         set_value_in_extractor_dict(recording_dict, access_path, new_value)
                         job_dict[rec_field] = recording_dict
