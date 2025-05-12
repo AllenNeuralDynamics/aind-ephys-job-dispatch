@@ -478,7 +478,8 @@ if __name__ == "__main__":
     for i, job_dict in enumerate(job_dict_list):
         job_dict["multi_input"] = MULTI_INPUT
         if MULTI_INPUT:
-            recording_name = f"{job_dict['session_name']}_{job_dict['recording_name']}"
+            # we use double _ here for easy parsing
+            recording_name = f"{job_dict['session_name']}__{job_dict['recording_name']}"
             job_dict["recording_name"] = recording_name
         with open(results_folder / f"job_{i}.json", "w") as f:
             json.dump(job_dict, f, indent=4, cls=SIJsonEncoder)
