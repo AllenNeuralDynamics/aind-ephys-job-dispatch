@@ -17,7 +17,7 @@ import logging
 import spikeinterface as si
 import spikeinterface.extractors as se
 
-from spikeinterface.core.core_tools import SIJsonEncoder, extractor_dict_iterator, set_value_in_extractor_dict
+from spikeinterface.core.core_tools import SIJsonEncoder
 
 
 try:
