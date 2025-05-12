@@ -67,17 +67,23 @@ debug_duration_help = (
 debug_duration_group.add_argument("--debug-duration", default=30, help=debug_duration_help)
 debug_duration_group.add_argument("static_debug_duration", nargs="?", default=None, help=debug_duration_help)
 
-input_group = parser.add_mutually_exclusive_group()
-input_help = "Which 'loader' to use (aind | spikeglx | nwb)"
-input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "openephys", "nwb"])
-input_group.add_argument("static_input", nargs="?", help=input_help)
-
 timestamps_skip_group = parser.add_mutually_exclusive_group()
 timestamps_skip_help = "Skip timestamps check"
 timestamps_skip_group.add_argument("--skip-timestamps-check", action="store_true", help=timestamps_skip_help)
 timestamps_skip_group.add_argument(
     "static_skip_timestamps_check", nargs="?", default="false", help=timestamps_skip_help
 )
+
+input_group = parser.add_mutually_exclusive_group()
+input_help = "Which 'loader' to use (openephys | spikeglx | nwb | aind)"
+input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "openephys", "nwb"])
+input_group.add_argument("static_input", nargs="?", help=input_help)
+
+multi_input_group = parser.add_mutually_exclusive_group()
+multi_input_help = "Which the data folder includes multiple sessions"
+multi_input_group.add_argument("--multi-input", action="store_true", help=multi_input_help)
+multi_input_group.add_argument("static_multi_input", nargs="?",  default="false", help=multi_input_help)
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -88,11 +94,16 @@ if __name__ == "__main__":
     )
     DEBUG = args.debug or args.static_debug.lower() == "true"
     DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
-    INPUT = args.static_input or args.input
     SKIP_TIMESTAMPS_CHECK = (
         True
         if args.static_skip_timestamps_check and args.static_skip_timestamps_check.lower() == "true"
         else args.skip_timestamps_check
+    )
+    INPUT = args.static_input or args.input
+    MULTI_INPUT = (
+        True
+        if args.static_multi_input and args.static_multi_input.lower() == "true"
+        else args.multi_input
     )
 
     # setup AIND logging before any other logging call
@@ -100,24 +111,19 @@ if __name__ == "__main__":
     remap_with_session_name = False
 
     if INPUT == "aind":
-        if (data_folder / "data_description.json").is_file():
-            # For pipelines using combined assets, the session data is in data folder
-            ecephys_session_folder = data_folder
-            remap_with_session_name = True
-        else:
-            ecephys_sessions = [
-                p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
-            ]
-            if len(ecephys_sessions) == 1:
-                ecephys_session_folder = ecephys_sessions[0]
-            elif len(ecephys_sessions) == 0:
-                raise Exception("No valid ecephys sessions found.")
-            else:
+        ecephys_session_folders = [
+            p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
+        ]
+        if len(ecephys_session_folders) == 0:
+            raise Exception("No valid ecephys sessions found.")
+        elif len(ecephys_session_folders) > 1:
+            if not MULTI_INPUT:
                 raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
 
 
     if HAVE_AIND_LOG_UTILS:
         # look for subject.json and data_description.json files
+        ecephys_session_folder = ecephys_session_folders[0]
         subject_json = ecephys_session_folder / "subject.json"
         subject_id = "undefined"
         if subject_json.is_file():
@@ -144,156 +150,168 @@ if __name__ == "__main__":
     logging.info(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
     logging.info(f"\tDEBUG: {DEBUG}")
     logging.info(f"\tDEBUG DURATION: {DEBUG_DURATION}")
-    logging.info(f"\tINPUT: {INPUT}")
     logging.info(f"\tSKIP TIMESTAMPS CHECK: {SKIP_TIMESTAMPS_CHECK}")
+    logging.info(f"\tINPUT: {INPUT}")
+    logging.info(f"\tMULTI INPUT: {MULTI_INPUT}")
 
     logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
     if INPUT == "aind":
-        session_name = None
-        if (ecephys_session_folder / "data_description.json").is_file():
-            data_description = json.load(open(ecephys_session_folder / "data_description.json", "r"))
-            session_name = data_description["name"]
+        for ecephys_session_folder in ecephys_session_folders:
+            session_name = None
+            if (ecephys_session_folder / "data_description.json").is_file():
+                data_description = json.load(open(ecephys_session_folder / "data_description.json", "r"))
+                session_name = data_description["name"]
 
-        # in the AIND pipeline, the session folder is mapped to
-        ecephys_base_folder = ecephys_session_folder / "ecephys"
+            # in the AIND pipeline, the session folder is mapped to
+            ecephys_base_folder = ecephys_session_folder / "ecephys"
 
-        if (ecephys_base_folder / "ecephys_compressed").is_dir():
-            new_format = True
-            ecephys_folder = ecephys_base_folder
-        else:
-            new_format = False
-            ecephys_folder = ecephys_session_folder
+            if (ecephys_base_folder / "ecephys_compressed").is_dir():
+                new_format = True
+                ecephys_folder = ecephys_base_folder
+            else:
+                new_format = False
+                ecephys_folder = ecephys_session_folder
 
-        compressed = False
-        if (ecephys_folder / "ecephys_compressed").is_dir():
-            # most recent folder organization
-            compressed = True
-            ecephys_compressed_folder = ecephys_folder / "ecephys_compressed"
-            ecephys_openephys_folder = ecephys_folder / "ecephys_clipped"
-        else:
-            # uncompressed data
-            ecephys_openephys_folder = ecephys_base_folder
+            compressed = False
+            if (ecephys_folder / "ecephys_compressed").is_dir():
+                # most recent folder organization
+                compressed = True
+                ecephys_compressed_folder = ecephys_folder / "ecephys_compressed"
+                ecephys_openephys_folder = ecephys_folder / "ecephys_clipped"
+            else:
+                # uncompressed data
+                ecephys_openephys_folder = ecephys_base_folder
 
-        logging.info(f"\tSession name: {session_name}")
-        logging.info(f"\tOpen Ephys folder: {str(ecephys_openephys_folder)}")
-        if compressed:
-            logging.info(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
+            logging.info(f"\tSession name: {session_name}")
+            logging.info(f"\tOpen Ephys folder: {str(ecephys_openephys_folder)}")
+            if compressed:
+                logging.info(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
 
-        # get blocks/experiments and streams info
-        num_blocks = se.get_neo_num_blocks("openephysbinary", ecephys_openephys_folder)
-        stream_names, stream_ids = se.get_neo_streams("openephysbinary", ecephys_openephys_folder)
+            # get blocks/experiments and streams info
+            num_blocks = se.get_neo_num_blocks("openephysbinary", ecephys_openephys_folder)
+            stream_names, stream_ids = se.get_neo_streams("openephysbinary", ecephys_openephys_folder)
 
-        # load first stream to map block_indices to experiment_names
-        rec_test = se.read_openephys(ecephys_openephys_folder, block_index=0, stream_name=stream_names[0])
-        record_node = list(rec_test.neo_reader.folder_structure.keys())[0]
-        experiments = rec_test.neo_reader.folder_structure[record_node]["experiments"]
-        exp_ids = list(experiments.keys())
-        experiment_names = [experiments[exp_id]["name"] for exp_id in sorted(exp_ids)]
+            # load first stream to map block_indices to experiment_names
+            rec_test = se.read_openephys(ecephys_openephys_folder, block_index=0, stream_name=stream_names[0])
+            record_node = list(rec_test.neo_reader.folder_structure.keys())[0]
+            experiments = rec_test.neo_reader.folder_structure[record_node]["experiments"]
+            exp_ids = list(experiments.keys())
+            experiment_names = [experiments[exp_id]["name"] for exp_id in sorted(exp_ids)]
 
-        logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
-        for block_index in range(num_blocks):
-            for stream_name in stream_names:
-                # skip NIDAQ and NP1-LFP streams
-                if "NI-DAQ" not in stream_name and "LFP" not in stream_name and "Rhythm" not in stream_name:
-                    experiment_name = experiment_names[block_index]
-                    exp_stream_name = f"{experiment_name}_{stream_name}"
-                    if not compressed:
-                        recording = se.read_openephys(
-                            ecephys_openephys_folder, stream_name=stream_name, block_index=block_index
-                        )
-                    else:
-                        recording = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name}.zarr")
-                    recording_name = f"{exp_stream_name}_recording"
-                    recording_dict[(session_name, recording_name)] = {}
-                    recording_dict[(session_name, recording_name)]["raw"] = recording
+            logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
+            for block_index in range(num_blocks):
+                for stream_name in stream_names:
+                    # skip NIDAQ and NP1-LFP streams
+                    if "NI-DAQ" not in stream_name and "LFP" not in stream_name and "Rhythm" not in stream_name:
+                        experiment_name = experiment_names[block_index]
+                        exp_stream_name = f"{experiment_name}_{stream_name}"
+                        if not compressed:
+                            recording = se.read_openephys(
+                                ecephys_openephys_folder, stream_name=stream_name, block_index=block_index
+                            )
+                        else:
+                            recording = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name}.zarr")
+                        recording_name = f"{exp_stream_name}_recording"
+                        recording_dict[(session_name, recording_name)] = {}
+                        recording_dict[(session_name, recording_name)]["raw"] = recording
 
-                    # load the associated LF stream (if available)
-                    if "AP" in stream_name:
-                        stream_name_lf = stream_name.replace("AP", "LFP")
-                        exp_stream_name_lf = exp_stream_name.replace("AP", "LFP")
-                        try:
-                            if not compressed:
-                                recording_lf = se.read_openephys(
-                                    ecephys_openephys_folder, stream_name=stream_name_lf, block_index=block_index
-                                )
-                            else:
-                                recording_lf = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr")
-                            recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
-                        except:
-                            logging.info(f"\t\tNo LFP stream found for {exp_stream_name}")
+                        # load the associated LF stream (if available)
+                        if "AP" in stream_name:
+                            stream_name_lf = stream_name.replace("AP", "LFP")
+                            exp_stream_name_lf = exp_stream_name.replace("AP", "LFP")
+                            try:
+                                if not compressed:
+                                    recording_lf = se.read_openephys(
+                                        ecephys_openephys_folder, stream_name=stream_name_lf, block_index=block_index
+                                    )
+                                else:
+                                    recording_lf = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr")
+                                recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                            except:
+                                logging.info(f"\t\tNo LFP stream found for {exp_stream_name}")
 
     elif INPUT == "spikeglx":
         # get blocks/experiments and streams info
         spikeglx_folders = [p for p in data_folder.iterdir() if p.is_dir()]
-        assert len(spikeglx_folders) == 1, "The data folder should contain a single SpikeGLX folder at a time"
-        spikeglx_folder = spikeglx_folders[0]
-        session_name = spikeglx_folder.name
-        stream_names, stream_ids = se.get_neo_streams("spikeglx", spikeglx_folder)
+        if len(spikeglx_folders) == 0:
+            raise Exception("No valid SpikeGLX folder found.")
+        elif len(spikeglx_folders) > 1:
+            if not MULTI_INPUT:
+                raise Exception("Multiple SpikeGLX sessions found in the data folder. Please only add one at a time")
 
-        # spikeglx has only one block
-        num_blocks = 1
-        block_index = 0
+        for spikeglx_folder in spikeglx_folders:
+            session_name = spikeglx_folder.name
+            stream_names, stream_ids = se.get_neo_streams("spikeglx", spikeglx_folder)
 
-        logging.info(f"\tSession name: {session_name}")
-        logging.info(f"\tNum. streams: {len(stream_names)}")
-        for stream_name in stream_names:
-            if "nidq" not in stream_name and "lf" not in stream_name:
-                recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name)
-                recording_name = f"block{block_index}_{stream_name}_recording"
-                recording_dict[(session_name, recording_name)] = {}
-                recording_dict[(session_name, recording_name)]["raw"] = recording
+            # spikeglx has only one block
+            num_blocks = 1
+            block_index = 0
 
-                # load the associated LF stream (if available)
-                if "ap" in stream_name:
-                    stream_name_lf = stream_name.replace("ap", "lf")
-                    try:
-                        recording_lf = se.read_spikeglx(spikeglx_folder, stream_name=stream_name_lf)
-                        recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
-                    except:
-                        logging.info(f"\t\tNo LFP stream found for {stream_name}")
+            logging.info(f"\tSession name: {session_name}")
+            logging.info(f"\tNum. streams: {len(stream_names)}")
+            for stream_name in stream_names:
+                if "nidq" not in stream_name and "lf" not in stream_name:
+                    recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name)
+                    recording_name = f"block{block_index}_{stream_name}_recording"
+                    recording_dict[(session_name, recording_name)] = {}
+                    recording_dict[(session_name, recording_name)]["raw"] = recording
+
+                    # load the associated LF stream (if available)
+                    if "ap" in stream_name:
+                        stream_name_lf = stream_name.replace("ap", "lf")
+                        try:
+                            recording_lf = se.read_spikeglx(spikeglx_folder, stream_name=stream_name_lf)
+                            recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                        except:
+                            logging.info(f"\t\tNo LFP stream found for {stream_name}")
 
     elif INPUT == "openephys":
         # get blocks/experiments and streams info
         openephys_folders = [p for p in data_folder.iterdir() if p.is_dir()]
-        assert len(openephys_folders) == 1, "The data folder should contain a single OpenEphys folder at a time"
-        openephys_folder = openephys_folders[0]
-        session_name = openephys_folder.name
-        num_blocks = se.get_neo_num_blocks("openephysbinary", openephys_folder)
-        stream_names, stream_ids = se.get_neo_streams("openephysbinary", openephys_folder)
+        if len(openephys_folders) == 0:
+            raise Exception("No valid Open Ephys folder found.")
+        elif len(openephys_folders) > 1:
+            if not MULTI_INPUT:
+                raise Exception("Multiple Open Ephys sessions found in the data folder. Please only add one at a time")
 
-        logging.info(f"\tSession name: {session_name}")
-        logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
+        for openephys_folder in openephys_folders:
+            session_name = openephys_folder.name
+            num_blocks = se.get_neo_num_blocks("openephysbinary", openephys_folder)
+            stream_names, stream_ids = se.get_neo_streams("openephysbinary", openephys_folder)
 
-        # load first stream to map block_indices to experiment_names
-        rec_test = se.read_openephys(openephys_folder, block_index=0, stream_name=stream_names[0])
-        record_node = list(rec_test.neo_reader.folder_structure.keys())[0]
-        experiments = rec_test.neo_reader.folder_structure[record_node]["experiments"]
-        exp_ids = list(experiments.keys())
-        experiment_names = [experiments[exp_id]["name"] for exp_id in sorted(exp_ids)]
+            logging.info(f"\tSession name: {session_name}")
+            logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
 
-        for block_index in range(num_blocks):
-            for stream_name in stream_names:
-                if "NI-DAQ" not in stream_name and "LFP" not in stream_name:
-                    experiment_name = experiment_names[block_index]
-                    exp_stream_name = f"{experiment_name}_{stream_name}"
-                    recording = se.read_openephys(
-                        openephys_folder, load_sync_timestamps=True, stream_name=stream_name, block_index=block_index
-                    )
-                    recording_name = f"{exp_stream_name}_recording"
-                    recording_dict[(session_name, recording_name)] = {}
-                    recording_dict[(session_name, recording_name)]["raw"] = recording
+            # load first stream to map block_indices to experiment_names
+            rec_test = se.read_openephys(openephys_folder, block_index=0, stream_name=stream_names[0])
+            record_node = list(rec_test.neo_reader.folder_structure.keys())[0]
+            experiments = rec_test.neo_reader.folder_structure[record_node]["experiments"]
+            exp_ids = list(experiments.keys())
+            experiment_names = [experiments[exp_id]["name"] for exp_id in sorted(exp_ids)]
 
-                    # load the associated LFP stream (if available)
-                    if "AP" in stream_name:
-                        stream_name_lf = stream_name.replace("AP", "LFP")
-                        try:
-                            recording_lf = se.read_openephys(
-                                openephys_folder, stream_name=stream_name_lf, block_index=block_index
-                            )
-                            recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
-                        except:
-                            logging.info(f"\t\tNo LFP stream found for {stream_name}")
+            for block_index in range(num_blocks):
+                for stream_name in stream_names:
+                    if "NI-DAQ" not in stream_name and "LFP" not in stream_name:
+                        experiment_name = experiment_names[block_index]
+                        exp_stream_name = f"{experiment_name}_{stream_name}"
+                        recording = se.read_openephys(
+                            openephys_folder, load_sync_timestamps=True, stream_name=stream_name, block_index=block_index
+                        )
+                        recording_name = f"{exp_stream_name}_recording"
+                        recording_dict[(session_name, recording_name)] = {}
+                        recording_dict[(session_name, recording_name)]["raw"] = recording
+
+                        # load the associated LFP stream (if available)
+                        if "AP" in stream_name:
+                            stream_name_lf = stream_name.replace("AP", "LFP")
+                            try:
+                                recording_lf = se.read_openephys(
+                                    openephys_folder, stream_name=stream_name_lf, block_index=block_index
+                                )
+                                recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                            except:
+                                logging.info(f"\t\tNo LFP stream found for {stream_name}")
 
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
@@ -306,32 +324,34 @@ if __name__ == "__main__":
         if len(nwb_files) == 0:
             raise ValueError("No NWB files found in the data folder")
         elif len(nwb_files) > 1:
-            raise ValueError("Multiple NWB files found in the data folder. Please only add one at a time")
-        nwb_file = nwb_files[0]
-        session_name = nwb_file.name
+            if not MULTI_INPUT:
+                raise ValueError("Multiple NWB files found in the data folder. Please only add one at a time")
 
-        # spikeglx has only one block
-        num_blocks = 1
-        block_index = 0
+        for nwb_file in nwb_files:
+            session_name = nwb_file.name
 
-        electrical_series_paths = se.NwbRecordingExtractor.fetch_available_electrical_series_paths(nwb_file)
+            # spikeglx has only one block
+            num_blocks = 1
+            block_index = 0
 
-        logging.info(f"\tSession name: {session_name}")
-        logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electrical_series_paths)}")
-        for electrical_series_path in electrical_series_paths:
-            # only use paths in acquisition
-            if "acquisition" in electrical_series_path:
-                stream_name = electrical_series_path.replace("/", "-")
-                recording = se.read_nwb_recording(nwb_file, electrical_series_path=electrical_series_path)
-                if recording.sampling_frequency < 10000:
-                    logging.info(
-                        f"\t\t{electrical_series_path} is probably an LFP signal (sampling frequency: "
-                        f"{recording.sampling_frequency} Hz). Skipping"
-                    )
-                    continue
-                recording_name = f"block{block_index}_{stream_name}_recording"
-                recording_dict[(session_name, recording_name)] = {}
-                recording_dict[(session_name, recording_name)]["raw"] = recording
+            electrical_series_paths = se.NwbRecordingExtractor.fetch_available_electrical_series_paths(nwb_file)
+
+            logging.info(f"\tSession name: {session_name}")
+            logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electrical_series_paths)}")
+            for electrical_series_path in electrical_series_paths:
+                # only use paths in acquisition
+                if "acquisition" in electrical_series_path:
+                    stream_name = electrical_series_path.replace("/", "-")
+                    recording = se.read_nwb_recording(nwb_file, electrical_series_path=electrical_series_path)
+                    if recording.sampling_frequency < 10000:
+                        logging.info(
+                            f"\t\t{electrical_series_path} is probably an LFP signal (sampling frequency: "
+                            f"{recording.sampling_frequency} Hz). Skipping"
+                        )
+                        continue
+                    recording_name = f"block{block_index}_{stream_name}_recording"
+                    recording_dict[(session_name, recording_name)] = {}
+                    recording_dict[(session_name, recording_name)]["raw"] = recording
 
     # populate job dict list
     job_dict_list = []
@@ -452,27 +472,14 @@ if __name__ == "__main__":
     if not results_folder.is_dir():
         results_folder.mkdir(parents=True)
 
+    if MULTI_INPUT:
+        logging.info("Adding session name to recording name")
+
     for i, job_dict in enumerate(job_dict_list):
-        if remap_with_session_name:
-
-            for rec_field in ["recording_dict", "recording_lfp_dict"]:
-                # here we remap the dictionary to prepemd a /session_name/ subfolder
-                recording_dict = job_dict.get(rec_field)
-                if recording_dict is not None:
-                    access_path, path_name, current_value = None, None, None
-                    path_list_iter = extractor_dict_iterator(recording_dict)
-                    for path_iter in path_list_iter:
-                        if "folder_path" in path_iter.name or "file_path" in path_iter.name:
-                            access_path = path_iter.access_path
-                            current_value = path_iter.value
-                            path_name = path_iter.name
-                            break
-                    if access_path is not None:
-                        new_value = str(Path(session_name) / current_value)
-                        logging.info(f"Remapping {path_name} field from {current_value} to {new_value}")
-                        set_value_in_extractor_dict(recording_dict, access_path, new_value)
-                        job_dict[rec_field] = recording_dict
-
+        job_dict["multi_input"] = MULTI_INPUT
+        if MULTI_INPUT:
+            recording_name = f"{job_dict['session_name']}_{job_dict['recording_name']}"
+            job_dict["recording_name"] = recording_name
         with open(results_folder / f"job_{i}.json", "w") as f:
             json.dump(job_dict, f, indent=4, cls=SIJsonEncoder)
     logging.info(f"Generated {len(job_dict_list)} job config files")
