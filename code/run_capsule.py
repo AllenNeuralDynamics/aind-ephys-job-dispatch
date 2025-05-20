@@ -447,6 +447,7 @@ if __name__ == "__main__":
         if len(reader_kwargs_list) > 1:
             if not MULTI_SESSION:
                 raise ValueError("To use multiple sessions, you need to set the multi_session flag to True")
+
         if session_names is not None:
             if not isinstance(session_names, list):
                 session_names = [session_names]
@@ -457,7 +458,15 @@ if __name__ == "__main__":
         else:
             session_names = [f"session{i}" for i in range(len(reader_kwargs_list))]
 
-        for session_name, reader_kwargs in zip(session_names, reader_kwargs_list):
+        if probe_paths is not None:
+            if isinstance(probe_paths, (str, dict)):
+                probe_paths = [probe_paths] * len(reader_kwargs_list)
+            if len(probe_paths) != len(reader_kwargs_list):
+                raise ValueError("If you provide multiple probe paths, you need to provide one for each reader_kwargs")
+        else:
+            probe_paths = [None] * len(reader_kwargs_list)
+
+        for probe_paths_session, session_name, reader_kwargs in zip(probe_paths, session_names, reader_kwargs_list):
             if recording_extractor_full_dict[reader_type] in neo_recording_extractors_list:
                 num_blocks = se.get_neo_num_blocks(reader_type, **reader_kwargs)
                 stream_names, stream_ids = se.get_neo_streams(reader_type, **reader_kwargs)
@@ -479,11 +488,11 @@ if __name__ == "__main__":
                     logging.info(f"\tStream name: {stream_name}")
                     recording = recording_extractor_full_dict[reader_type](**reader_kwargs)
                     probe_path = None
-                    if probe_paths is not None:
-                        if isinstance(probe_paths, str):
-                            probe_path = probe_paths
-                        elif isinstance(probe_paths, dict):
-                            probe_path = probe_paths.get(stream_name, None)
+                    if probe_paths_session is not None:
+                        if isinstance(probe_paths_session, str):
+                            probe_path = probe_paths_session
+                        elif isinstance(probe_paths_session, dict):
+                            probe_path = probe_paths_session.get(stream_name, None)
                     if probe_path is not None:
                         probegroup = read_probeinterface(probe_path)
                         recording = recording.set_probegroup(probegroup)
