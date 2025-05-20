@@ -30,7 +30,7 @@ The `code/run` script takes several arguments:
 
 ```bash
   --concatenate         Whether to concatenate recordings (segments) or not. Default: False
-  --split-groups        Whether to process different groups separately
+  --no-split-groups     Whether to process different groups separately
   --debug               Whether to run in DEBUG mode
   --debug-duration DEBUG_DURATION
                         Duration of clipped recording in debug mode. Default is 30 seconds. Only used if debug is enabled
