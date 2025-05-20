@@ -75,40 +75,91 @@ timestamps_skip_group.add_argument(
 )
 
 input_group = parser.add_mutually_exclusive_group()
-input_help = "Which 'loader' to use (openephys | spikeglx | nwb | aind)"
-input_group.add_argument("--input", default="aind", help=input_help, choices=["aind", "spikeglx", "openephys", "nwb"])
+input_help = "Which 'loader' to use (spikeglx | openephys | nwb | spikeinterface | aind)"
+input_group.add_argument("--input", default=None, help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
 input_group.add_argument("static_input", nargs="?", help=input_help)
 
-multi_input_group = parser.add_mutually_exclusive_group()
-multi_input_help = "Which the data folder includes multiple sessions"
-multi_input_group.add_argument("--multi-input", action="store_true", help=multi_input_help)
-multi_input_group.add_argument("static_multi_input", nargs="?",  default="false", help=multi_input_help)
+multi_session_group = parser.add_mutually_exclusive_group()
+multi_session_help = "Whether the data folder includes multiple sessions or not. Default: False"
+multi_session_group.add_argument("--multi-session", action="store_true", help=multi_session_help)
+multi_session_group.add_argument("static_multi_session", nargs="?",  default="false", help=multi_session_help)
 
+spikeinterface_info_group = parser.add_mutually_exclusive_group()
+spikeinterface_info_help = """
+    A JSON path or string to specify how to parse the recording in spikeinterface, including: 
+    - 1. reader_type (required): string with the reader type (e.g. 'plexon', 'neuralynx', etc.) .
+    - 2. reader_kwargs (optional): dictionary (or list of dicts for multi-session) with the reader kwargs (e.g. {'folder': '/path/to/folder'}).
+    - 3. keep_stream_substrings (optional): string or list of strings with the stream names to load (e.g. 'AP' or ['AP', 'LFP']).
+    - 4. skip_stream_substrings (optional): string (or list of strings) with substrings used to skip streams (e.g. 'NIDQ' or ['USB', 'EVTS']).
+    - 5. probe_paths (optional): string or dict with the probe paths to a ProbeInterface JSON file (e.g. '/path/to/probe.json'). 
+                                 If a dict is provided, the key is the stream name and the value is the probe path.
+                                 If multi-session, a list can be provided with the probe paths for each session.
+    - 6. session_names (optional): string or list of strings with the session names (e.g. 'session1').
+    If reader_kwargs is not provided, the reader will be created with default parameters. The probe_path is 
+    required if the reader doesn't load the probe automatically.
+"""
+spikeinterface_info_group.add_argument(
+    "--spikeinterface-info",
+    default=None,
+    help=spikeinterface_info_help,
+)
+spikeinterface_info_group.add_argument(
+    "static_spikeinterface_info",
+    nargs="?",
+    default=None,
+    help=spikeinterface_info_help,
+)
+
+parser.add_argument("--params", default=None, help="Path to the parameters file or JSON string. If given, it will override all other arguments.")
 
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
-    SPLIT_GROUPS = (
-        True if args.static_split_groups and args.static_split_groups.lower() == "true" else not args.no_split_groups
-    )
-    DEBUG = args.debug or args.static_debug.lower() == "true"
-    DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
-    SKIP_TIMESTAMPS_CHECK = (
-        True
-        if args.static_skip_timestamps_check and args.static_skip_timestamps_check.lower() == "true"
-        else args.skip_timestamps_check
-    )
-    INPUT = args.static_input or args.input
-    MULTI_INPUT = (
-        True
-        if args.static_multi_input and args.static_multi_input.lower() == "true"
-        else args.multi_input
-    )
+    # if params is given, override all other arguments
+    PARAMS = args.params
+    if PARAMS is not None:
+        if Path(PARAMS).is_file():
+            with open(PARAMS, "r") as f:
+                params = json.load(f)
+        else:
+            params = json.loads(PARAMS)
+
+        CONCAT = params.get("concatenate", False)
+        SPLIT_GROUPS = params.get("split_groups", True)
+        DEBUG = params.get("debug", False)
+        DEBUG_DURATION = float(params.get("debug_duration"))
+        SKIP_TIMESTAMPS_CHECK = params.get("skip_timestamps_check", False)
+        MULTI_SESSION = params.get("multi_session", False)
+        INPUT = params.get("input")
+        assert INPUT is not None, "Input type is required"
+        if INPUT == "spikeinterface":
+            spikeinterface_info = params.get("spikeinterface_info")
+            assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
+    else:
+        # if params is not given, use the arguments
+        CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
+        SPLIT_GROUPS = (
+            True if args.static_split_groups and args.static_split_groups.lower() == "true" else not args.no_split_groups
+        )
+        DEBUG = args.debug or args.static_debug.lower() == "true"
+        DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
+        SKIP_TIMESTAMPS_CHECK = (
+            True
+            if args.static_skip_timestamps_check and args.static_skip_timestamps_check.lower() == "true"
+            else args.skip_timestamps_check
+        )
+        MULTI_SESSION = (
+            True
+            if args.static_multi_session and args.static_multi_session.lower() == "true"
+            else args.multi_session
+        )
+        INPUT = args.static_input or args.input
+        if INPUT == "spikeinterface":
+            spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
+            assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
 
     # setup AIND logging before any other logging call
     aind_log_setup = False
-    remap_with_session_name = False
 
     if INPUT == "aind":
         ecephys_session_folders = [
@@ -117,7 +168,7 @@ if __name__ == "__main__":
         if len(ecephys_session_folders) == 0:
             raise Exception("No valid ecephys sessions found.")
         elif len(ecephys_session_folders) > 1:
-            if not MULTI_INPUT:
+            if not MULTI_SESSION:
                 raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
 
 
@@ -152,7 +203,7 @@ if __name__ == "__main__":
     logging.info(f"\tDEBUG DURATION: {DEBUG_DURATION}")
     logging.info(f"\tSKIP TIMESTAMPS CHECK: {SKIP_TIMESTAMPS_CHECK}")
     logging.info(f"\tINPUT: {INPUT}")
-    logging.info(f"\tMULTI INPUT: {MULTI_INPUT}")
+    logging.info(f"\tMULTI INPUT: {MULTI_SESSION}")
 
     logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
@@ -237,7 +288,7 @@ if __name__ == "__main__":
         if len(spikeglx_folders) == 0:
             raise Exception("No valid SpikeGLX folder found.")
         elif len(spikeglx_folders) > 1:
-            if not MULTI_INPUT:
+            if not MULTI_SESSION:
                 raise Exception("Multiple SpikeGLX sessions found in the data folder. Please only add one at a time")
 
         for spikeglx_folder in spikeglx_folders:
@@ -272,7 +323,7 @@ if __name__ == "__main__":
         if len(openephys_folders) == 0:
             raise Exception("No valid Open Ephys folder found.")
         elif len(openephys_folders) > 1:
-            if not MULTI_INPUT:
+            if not MULTI_SESSION:
                 raise Exception("Multiple Open Ephys sessions found in the data folder. Please only add one at a time")
 
         for openephys_folder in openephys_folders:
@@ -324,7 +375,7 @@ if __name__ == "__main__":
         if len(nwb_files) == 0:
             raise ValueError("No NWB files found in the data folder")
         elif len(nwb_files) > 1:
-            if not MULTI_INPUT:
+            if not MULTI_SESSION:
                 raise ValueError("Multiple NWB files found in the data folder. Please only add one at a time")
 
         for nwb_file in nwb_files:
@@ -349,6 +400,98 @@ if __name__ == "__main__":
                             f"{recording.sampling_frequency} Hz). Skipping"
                         )
                         continue
+                    recording_name = f"block{block_index}_{stream_name}_recording"
+                    recording_dict[(session_name, recording_name)] = {}
+                    recording_dict[(session_name, recording_name)]["raw"] = recording
+
+    elif INPUT == "spikeinterface":
+        from spikeinterface.extractors import recording_extractor_full_dict, neo_recording_extractors_list
+        from probeinterface import read_probeinterface
+
+        if isinstance(spikeinterface_info, dict):
+            # spikeinterface_info already provided as a dict with a JSON file/string
+            pass
+        elif Path(spikeinterface_info).is_file():
+            with open(spikeinterface_info, "r") as f:
+                spikeinterface_info = json.load(f)
+        elif isinstance(spikeinterface_info, str):
+            spikeinterface_info = json.loads(spikeinterface_info)
+
+        reader_type = spikeinterface_info.get("reader_type", None)
+        assert reader_type is not None, "Reader type is required"
+        assert reader_type in recording_extractor_full_dict, f"Reader type {reader_type} not supported"
+        reader_kwargs = spikeinterface_info.get("reader_kwargs", None)
+        keep_stream_substrings = spikeinterface_info.get("keep_stream_substrings", None)
+        skip_stream_substrings = spikeinterface_info.get("skip_stream_substrings", None)
+        probe_paths = spikeinterface_info.get("probe_paths", None)
+        session_names = spikeinterface_info.get("session_names", None)
+
+        if keep_stream_substrings is not None:
+            assert skip_stream_substrings is None, "You cannot use both keep_stream_substrings and skip_stream_substrings"
+            if isinstance(keep_stream_substrings, str):
+                keep_stream_substrings = [keep_stream_substrings]
+
+        if skip_stream_substrings is not None:
+            assert keep_stream_substrings is None, "You cannot use both keep_stream_substrings and skip_stream_substrings"
+            if isinstance(skip_stream_substrings, str):
+                skip_stream_substrings = [skip_stream_substrings]
+
+        # check if it's a neo reader
+        if isinstance(reader_kwargs, dict):
+            reader_kwargs_list = [reader_kwargs]
+        elif isinstance(reader_kwargs, list):
+            reader_kwargs_list = reader_kwargs
+        else:
+            raise ValueError("reader_kwargs should be a dict or a list of dicts")
+
+        if len(reader_kwargs_list) > 1:
+            if not MULTI_SESSION:
+                raise ValueError("To use multiple sessions, you need to set the multi_session flag to True")
+        if session_names is not None:
+            if not isinstance(session_names, list):
+                session_names = [session_names]
+            if len(session_names) != len(reader_kwargs_list):
+                raise ValueError(
+                    "If you provide multiple session names, you need to provide one for each reader_kwargs"
+                )
+        else:
+            session_names = [f"session{i}" for i in range(len(reader_kwargs_list))]
+
+        for session_name, reader_kwargs in zip(session_names, reader_kwargs_list):
+            if recording_extractor_full_dict[reader_type] in neo_recording_extractors_list:
+                num_blocks = se.get_neo_num_blocks(reader_type, **reader_kwargs)
+                stream_names, stream_ids = se.get_neo_streams(reader_type, **reader_kwargs)
+            else:
+                num_blocks = 1
+                stream_names = [None]
+            for block_index in range(num_blocks):
+                for stream_name in stream_names:
+                    if stream_name is not None:
+                        if keep_stream_substrings is not None:
+                            if not any(s in stream_name for s in keep_stream_substrings):
+                                logging.info(f"\tSkipping stream {stream_name} (keep substrings: {keep_stream_substrings})")
+                                continue
+                        if skip_stream_substrings is not None:
+                            if any(s in stream_name for s in skip_stream_substrings):
+                                logging.info(f"\tSkipping stream {stream_name} (skip substrings: {skip_stream_substrings})")
+                                continue
+                        reader_kwargs["stream_name"] = stream_name
+                    logging.info(f"\tStream name: {stream_name}")
+                    recording = recording_extractor_full_dict[reader_type](**reader_kwargs)
+                    probe_path = None
+                    if probe_paths is not None:
+                        if isinstance(probe_paths, str):
+                            probe_path = probe_paths
+                        elif isinstance(probe_paths, dict):
+                            probe_path = probe_paths.get(stream_name, None)
+                    if probe_path is not None:
+                        probegroup = read_probeinterface(probe_path)
+                        recording = recording.set_probegroup(probegroup)
+                    probegroup = recording.get_probegroup()
+                    assert probegroup is not None, (
+                        f"Probe not specified for {stream_name}. "
+                        f"Use the 'probe_paths' field of spikeinterface-info to specify it."
+                    )
                     recording_name = f"block{block_index}_{stream_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["raw"] = recording
@@ -472,12 +615,12 @@ if __name__ == "__main__":
     if not results_folder.is_dir():
         results_folder.mkdir(parents=True)
 
-    if MULTI_INPUT:
+    if MULTI_SESSION:
         logging.info("Adding session name to recording name")
 
     for i, job_dict in enumerate(job_dict_list):
-        job_dict["multi_input"] = MULTI_INPUT
-        if MULTI_INPUT:
+        job_dict["multi_input"] = MULTI_SESSION
+        if MULTI_SESSION:
             # we use double _ here for easy parsing
             recording_name = f"{job_dict['session_name']}__{job_dict['recording_name']}"
             job_dict["recording_name"] = recording_name
