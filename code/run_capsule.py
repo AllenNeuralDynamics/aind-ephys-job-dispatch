@@ -202,8 +202,8 @@ if __name__ == "__main__":
     logging.info(f"\tDEBUG: {DEBUG}")
     logging.info(f"\tDEBUG DURATION: {DEBUG_DURATION}")
     logging.info(f"\tSKIP TIMESTAMPS CHECK: {SKIP_TIMESTAMPS_CHECK}")
+    logging.info(f"\tMULTI SESSION: {MULTI_SESSION}")
     logging.info(f"\tINPUT: {INPUT}")
-    logging.info(f"\tMULTI INPUT: {MULTI_SESSION}")
 
     logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
