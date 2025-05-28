@@ -110,6 +110,7 @@ if __name__ == "__main__":
     # if params is given, override all other arguments
     PARAMS = args.params
     if PARAMS is not None:
+        # try to parse the JSON string first to avoid file name too long error
         try:
             params = json.loads(PARAMS)
         except json.JSONDecodeError:
