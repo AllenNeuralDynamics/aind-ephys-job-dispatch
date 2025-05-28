@@ -383,7 +383,7 @@ if __name__ == "__main__":
                 raise ValueError("Multiple NWB files found in the data folder. Please only add one at a time")
 
         for nwb_file in nwb_files:
-            nwb_file = nwb_file.resolve().absolute()
+            nwb_file = nwb_file.absolute()
             print(f"Processing NWB file: {nwb_file}")
             session_name = nwb_file.stem
 
