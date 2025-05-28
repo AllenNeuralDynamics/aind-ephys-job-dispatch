@@ -383,7 +383,9 @@ if __name__ == "__main__":
                 raise ValueError("Multiple NWB files found in the data folder. Please only add one at a time")
 
         for nwb_file in nwb_files:
-            session_name = nwb_file.name
+            nwb_file = nwb_file.resolve().absolute()
+            print(f"Processing NWB file: {nwb_file}")
+            session_name = nwb_file.stem
 
             # spikeglx has only one block
             num_blocks = 1
@@ -618,6 +620,7 @@ if __name__ == "__main__":
                     duration=duration,
                     debug=DEBUG,
                 )
+                print(f"Relative to: {data_folder}")
                 rec_str = f"\t{recording_name_segment}\n\t\tDuration: {duration} s - Num. channels: {recording.get_num_channels()}"
                 if HAS_LFP:
                     job_dict["recording_lfp_dict"] = recording_lfp.to_dict(recursive=True, relative_to=data_folder)
