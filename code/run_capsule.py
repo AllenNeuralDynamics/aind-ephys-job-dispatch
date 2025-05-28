@@ -118,11 +118,15 @@ if __name__ == "__main__":
     # if params is given, override all other arguments
     PARAMS = args.params
     if PARAMS is not None:
-        if Path(PARAMS).is_file():
-            with open(PARAMS, "r") as f:
-                params = json.load(f)
-        else:
+        # try to parse the JSON string first to avoid file name too long error
+        try:
             params = json.loads(PARAMS)
+        except json.JSONDecodeError:
+            if Path(PARAMS).is_file():
+                with open(PARAMS, "r") as f:
+                    params = json.load(f)
+            else:
+                raise ValueError(f"Invalid parameters: {PARAMS} is not a valid JSON string or file path")
 
         CONCAT = params.get("concatenate", False)
         SPLIT_GROUPS = params.get("split_groups", True)
