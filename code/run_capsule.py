@@ -84,6 +84,13 @@ multi_session_help = "Whether the data folder includes multiple sessions or not.
 multi_session_group.add_argument("--multi-session", action="store_true", help=multi_session_help)
 multi_session_group.add_argument("static_multi_session", nargs="?",  default="false", help=multi_session_help)
 
+min_recording_duration = parser.add_mutually_exclusive_group()
+min_recording_duration_help = (
+    "If provided, skips recordings with duration less than this value. If -1 (default), no recordings are skipped"
+)
+min_recording_duration.add_argument("--min-recording-duration", default="-1", help=min_recording_duration_help)
+min_recording_duration.add_argument("static_min_recording_duration", nargs="?", default=None, help=min_recording_duration_help)
+
 spikeinterface_info_group = parser.add_mutually_exclusive_group()
 spikeinterface_info_help = """
     A JSON path or string to specify how to parse the recording in spikeinterface, including: 
@@ -109,14 +116,6 @@ spikeinterface_info_group.add_argument(
     default=None,
     help=spikeinterface_info_help,
 )
-
-min_recording_duration = parser.add_mutually_exclusive_group()
-min_recording_duration_help = (
-    "If provided, skips recordings with duration less than this value. If -1 (default), no recordings are skipped"
-)
-min_recording_duration.add_argument("--min-recording-duration", default="-1", help=min_recording_duration_help)
-min_recording_duration.add_argument("static_min_recording_duration", nargs="?", default=None, help=min_recording_duration_help)
-
 
 parser.add_argument("--params", default=None, help="Path to the parameters file or JSON string. If given, it will override all other arguments.")
 
@@ -535,7 +534,7 @@ if __name__ == "__main__":
             duration = recording.get_total_duration()
             if duration < MIN_RECORDING_DURATION:
                 logging.info(
-                    "\tSkipping recording {session_name}-{recording_name} with duration {np.round(duration, 2)}s"
+                    f"\tSkipping recording {session_name}-{recording_name} with duration {np.round(duration, 2)}s"
                 )
                 continue
 
