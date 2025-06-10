@@ -84,6 +84,14 @@ multi_input_help = "Which the data folder includes multiple sessions"
 multi_input_group.add_argument("--multi-input", action="store_true", help=multi_input_help)
 multi_input_group.add_argument("static_multi_input", nargs="?",  default="false", help=multi_input_help)
 
+min_recording_duration = parser.add_mutually_exclusive_group()
+min_recording_duration_help = (
+    "If provided, skips recordings with duration less than this value. If -1 (default), no recordings are skipped"
+)
+min_recording_duration.add_argument("--min-recording-duration", default="-1", help=min_recording_duration_help)
+min_recording_duration.add_argument("static_min_recording_duration", nargs="?", default=None, help=min_recording_duration_help)
+
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -105,6 +113,7 @@ if __name__ == "__main__":
         if args.static_multi_input and args.static_multi_input.lower() == "true"
         else args.multi_input
     )
+    MIN_RECORDING_DURATION = float(args.static_min_recording_duration or args.min_recording_duration)
 
     # setup AIND logging before any other logging call
     aind_log_setup = False
@@ -360,6 +369,14 @@ if __name__ == "__main__":
         session_name, recording_name = session_recording_name
         recording = recording_dict[session_recording_name]["raw"]
         recording_lfp = recording_dict[session_recording_name].get("lfp", None)
+
+        if MIN_RECORDING_DURATION != -1:
+            duration = recording.get_total_duration()
+            if duration < MIN_RECORDING_DURATION:
+                logging.info(
+                    "\tSkipping recording {session_name}-{recording_name} with duration {np.round(duration, 2)}s"
+                )
+                continue
 
         HAS_LFP = recording_lfp is not None
         if CONCAT:
