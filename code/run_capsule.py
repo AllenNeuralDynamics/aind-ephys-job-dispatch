@@ -147,7 +147,7 @@ if __name__ == "__main__":
         if INPUT == "spikeinterface":
             spikeinterface_info = params.get("spikeinterface_info")
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
-        MULTI_INPUT = params.get("multi_input", False)
+        MULTI_SESSION = params.get("multi_session", False)
         MIN_RECORDING_DURATION = params.get("min_recording_duration", -1)
     else:
         # if params is not given, use the arguments
@@ -171,11 +171,6 @@ if __name__ == "__main__":
         if INPUT == "spikeinterface":
             spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
-        MULTI_INPUT = (
-            True
-            if args.static_multi_input and args.static_multi_input.lower() == "true"
-            else args.multi_input
-        )
         MIN_RECORDING_DURATION = float(args.static_min_recording_duration or args.min_recording_duration)
 
     # setup AIND logging before any other logging call
@@ -224,6 +219,7 @@ if __name__ == "__main__":
     logging.info(f"\tSKIP TIMESTAMPS CHECK: {SKIP_TIMESTAMPS_CHECK}")
     logging.info(f"\tMULTI SESSION: {MULTI_SESSION}")
     logging.info(f"\tINPUT: {INPUT}")
+    logging.info(f"\tMIN_RECORDING_DURATION: {MIN_RECORDING_DURATION}")
 
     logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
