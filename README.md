@@ -36,6 +36,7 @@ The `code/run` script takes several arguments:
                         Duration of clipped recording in debug mode. Default is 30 seconds. Only used if debug is enabled
   --skip-timestamps-check
                         Skip timestamps check
+  --multi-session       Whether the data folder includes multiple sessions or not. Default: False
   --input {aind,spikeglx,openephys,nwb,spikeinterface}
                         Which 'loader' to use (aind | spikeglx | openephys | nwb | spikeinterface)
   --spikeinterface-info SPIKEINTERFACE_INFO
