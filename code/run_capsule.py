@@ -19,6 +19,8 @@ import spikeinterface.extractors as se
 
 from spikeinterface.core.core_tools import SIJsonEncoder
 
+import probeinterface as pi
+
 try:
     from aind_log_utils import log
 
@@ -248,6 +250,28 @@ if __name__ == "__main__":
                     else:
                         recording = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name}.zarr")
                     recording_name = f"{exp_stream_name}_recording"
+
+                    # fix probe information in case of missing names
+                    probes_info = recording.get_annotation("probes_info")
+                    if probes_info is not None and len(probes_info) == 1:
+                        probe_info = probes_info[0]
+                        probe_name = probe_info["name"]
+                        if probe_name == "":
+                            record_node, oe_stream_name = stream_name.split("#")
+                            logging.info(
+                                f"\t\tProbe name is missing for block {block_index} - {oe_stream_name}! "
+                                "Parsing Open Ephys settings to load up-to-date probe info"
+                            )
+                            if block_index == 0:
+                                settings_name = "settings.xml"
+                            else:
+                                settings_name = f"settings_{block_index + 1}.xml"
+                            probe = pi.read_openephys(
+                                ecephys_openephys_folder / record_node / settings_name,
+                                stream_name=oe_stream_name
+                            )
+                            recording.set_probe(probe, in_place=True)
+
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["raw"] = recording
 
