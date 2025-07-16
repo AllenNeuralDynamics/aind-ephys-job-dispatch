@@ -194,6 +194,7 @@ if __name__ == "__main__":
 
     logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
+    include_annotations = False
     if INPUT == "aind":
         session_name = None
         if (ecephys_session_folder / "data_description.json").is_file():
@@ -252,6 +253,7 @@ if __name__ == "__main__":
                     recording_name = f"{exp_stream_name}_recording"
 
                     # fix probe information in case of missing names
+                    updated_probe = None
                     probes_info = recording.get_annotation("probes_info")
                     if probes_info is not None and len(probes_info) == 1:
                         probe_info = probes_info[0]
@@ -266,11 +268,13 @@ if __name__ == "__main__":
                                 settings_name = "settings.xml"
                             else:
                                 settings_name = f"settings_{block_index + 1}.xml"
-                            probe = pi.read_openephys(
+                            updated_probe = pi.read_openephys(
                                 ecephys_openephys_folder / record_node / settings_name,
                                 stream_name=oe_stream_name
                             )
-                            recording.set_probe(probe, in_place=True)
+                            recording.set_probe(updated_probe, in_place=True)
+                            # make sure we the updated annotations when dumping the dict!
+                            include_annotations = True
 
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["raw"] = recording
@@ -286,6 +290,8 @@ if __name__ == "__main__":
                                 )
                             else:
                                 recording_lf = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr")
+                            if updated_probe is not None:
+                                recording_lf.set_probe(updated_probe, in_place=True)
                             recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
                         except:
                             logging.info(f"\t\tNo LFP stream found for {exp_stream_name}")
@@ -575,7 +581,7 @@ if __name__ == "__main__":
                 job_dict = dict(
                     session_name=session_name,
                     recording_name=str(recording_name_segment),
-                    recording_dict=recording.to_dict(recursive=True, relative_to=data_folder),
+                    recording_dict=recording.to_dict(recursive=True, include_annotations=include_annotations, relative_to=data_folder),
                     skip_times=skip_times,
                     duration=duration,
                     debug=DEBUG,
