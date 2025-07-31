@@ -29,22 +29,22 @@ The ecephys data can have multiple experiments (or blocks), each with multiple s
 The `code/run` script takes several arguments:
 
 ```bash
-  --concatenate         Whether to concatenate recordings (segments) or not. Default: False
-  --no-split-groups     Whether to process different groups separately
-  --debug               Whether to run in DEBUG mode
-  --debug-duration DEBUG_DURATION
-                        Duration of clipped recording in debug mode. Default is 30 seconds. Only used if debug is enabled
-  --skip-timestamps-check
-                        Skip timestamps check
+  --concatenate             Whether to concatenate recordings (segments) or not. Default: False
+  --no-split-groups         Whether to process different groups separately
+  --debug                   Whether to run in DEBUG mode
+  --debug-duration          Duration of clipped recording in debug mode. Default is 30 seconds. 
+                            Only used if debug is enabled
+  --skip-timestamps-check   Skip timestamps check
   --input {aind,spikeglx,openephys,nwb,spikeinterface}
-                        Which 'loader' to use (aind | spikeglx | openephys | nwb | spikeinterface)
-  --spikeinterface-info SPIKEINTERFACE_INFO
-                        A JSON path or string to specify how to parse the recording in spikeinterface, including: 
-                        - 1. reader_type (required): string with the reader type (e.g. 'plexon', 'neuralynx', 'intan' etc.).
-                        - 2. reader_kwargs (optional): dictionary with the reader kwargs (e.g. {'folder': '/path/to/folder'}).
-                        - 3. keep_stream_substrings (optional): string or list of strings with the stream names to load (e.g. 'AP' or ['AP', 'LFP']).
-                        - 4. skip_stream_substrings (optional): string (or list of strings) with substrings used to skip streams (e.g. 'NIDQ' or ['USB', 'EVENTS']).
-                        - 5. probe_paths (optional): string or dict the probe paths to a ProbeInterface JSON file (e.g. '/path/to/probe.json'). If a dict is provided, the key is the stream name and the value is the probe path. If reader_kwargs is not provided, the reader will be created with default parameters. The probe_path is required if the reader doesn't load the probe automatically.
+                            Which 'loader' to use (aind | spikeglx | openephys | nwb | spikeinterface)
+  --multi-session           Whether the data folder includes multiple sessions or not. Default: False
+  --min-recording-duration  Minimum duration of the recording in seconds. Recordings shorter than this will be skipped. Default: -1 (no minimum duration)
+  --spikeinterface-info     A JSON path or string to specify how to parse the recording in spikeinterface including: 
+                            - 1. reader_type (required): string with the reader type (e.g. 'plexon', 'neuralynx', 'intan' etc.).
+                            - 2. reader_kwargs (optional): dictionary with the reader kwargs (e.g. {'folder': '/path/to/folder'}).
+                            - 3. keep_stream_substrings (optional): string or list of strings with the stream names to load (e.g. 'AP' or ['AP', 'LFP']).
+                            - 4. skip_stream_substrings (optional): string (or list of strings) with substrings used to skip streams (e.g. 'NIDQ' or ['USB', 'EVENTS']).
+                            - 5. probe_paths (optional): string or dict the probe paths to a ProbeInterface JSON file (e.g. '/path/to/probe.json'). If a dict is provided, the key is the stream name and the value is the probe path. If reader_kwargs is not provided, the reader will be created with default parameters. The probe_path is required if the reader doesn't load the probe automatically.
 ```
 
 ### Output
