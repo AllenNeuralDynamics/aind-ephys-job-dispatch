@@ -19,6 +19,7 @@ import spikeinterface.extractors as se
 
 from spikeinterface.core.core_tools import SIJsonEncoder
 
+import probeinterface as pi
 
 try:
     from aind_log_utils import log
@@ -222,6 +223,7 @@ if __name__ == "__main__":
 
     logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
+    include_annotations = False
     if INPUT == "aind":
         for ecephys_session_folder in ecephys_session_folders:
             session_name = None
@@ -279,6 +281,31 @@ if __name__ == "__main__":
                         else:
                             recording = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name}.zarr")
                         recording_name = f"{exp_stream_name}_recording"
+
+                        # fix probe information in case of missing names
+                        updated_probe = None
+                        probes_info = recording.get_annotation("probes_info")
+                        if probes_info is not None and len(probes_info) == 1:
+                            probe_info = probes_info[0]
+                            probe_name = probe_info["name"]
+                            if probe_name == "":
+                                record_node, oe_stream_name = stream_name.split("#")
+                                logging.info(
+                                    f"\t\tProbe name is missing for block {block_index} - {oe_stream_name}! "
+                                    "Parsing Open Ephys settings to load up-to-date probe info"
+                                )
+                                if block_index == 0:
+                                    settings_name = "settings.xml"
+                                else:
+                                    settings_name = f"settings_{block_index + 1}.xml"
+                                updated_probe = pi.read_openephys(
+                                    ecephys_openephys_folder / record_node / settings_name,
+                                    stream_name=oe_stream_name
+                                )
+                                recording.set_probe(updated_probe, in_place=True)
+                                # make sure we the updated annotations when dumping the dict!
+                                include_annotations = True
+
                         recording_dict[(session_name, recording_name)] = {}
                         recording_dict[(session_name, recording_name)]["raw"] = recording
 
@@ -293,6 +320,8 @@ if __name__ == "__main__":
                                     )
                                 else:
                                     recording_lf = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr")
+                                if updated_probe is not None:
+                                    recording_lf.set_probe(updated_probe, in_place=True)
                                 recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
                             except:
                                 logging.info(f"\t\tNo LFP stream found for {exp_stream_name}")
@@ -634,7 +663,7 @@ if __name__ == "__main__":
                 job_dict = dict(
                     session_name=session_name,
                     recording_name=str(recording_name_segment),
-                    recording_dict=recording.to_dict(recursive=True, relative_to=data_folder),
+                    recording_dict=recording.to_dict(recursive=True, include_annotations=include_annotations, relative_to=data_folder),
                     skip_times=skip_times,
                     duration=duration,
                     debug=DEBUG,
