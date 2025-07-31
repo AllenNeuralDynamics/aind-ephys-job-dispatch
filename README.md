@@ -29,7 +29,7 @@ The ecephys data can have multiple experiments (or blocks), each with multiple s
 The `code/run` script takes several arguments:
 
 ```bash
-  --concatenate             Whether to concatenate recordings (segments) or not. Default: False
+  --no-split-segments       Whether to concatenate or split recording segments or not. Default: split segments
   --no-split-groups         Whether to process different groups separately
   --debug                   Whether to run in DEBUG mode
   --debug-duration          Duration of clipped recording in debug mode. Default is 30 seconds. 
