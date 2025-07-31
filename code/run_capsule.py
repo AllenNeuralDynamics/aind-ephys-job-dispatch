@@ -46,10 +46,10 @@ results_folder = Path("../results")
 # Define argument parser
 parser = argparse.ArgumentParser(description="Dispatch jobs for AIND ephys pipeline")
 
-concat_group = parser.add_mutually_exclusive_group()
-concat_help = "Whether to concatenate recordings (segments) or not. Default: False"
-concat_group.add_argument("--concatenate", action="store_true", help=concat_help)
-concat_group.add_argument("static_concatenate", nargs="?", default="false", help=concat_help)
+split_segment_group = parser.add_mutually_exclusive_group()
+split_segment_help = "Whether to concatenate or split recording segments or not. Default: split segments"
+split_segment_group.add_argument("--no-split-segments", action="store_true", help=split_segment_help)
+split_segment_group.add_argument("static_split_segments", nargs="?", default="true", help=split_segment_help)
 
 split_group = parser.add_mutually_exclusive_group()
 split_help = "Whether to process different groups separately. Default: split groups"
@@ -122,7 +122,7 @@ if __name__ == "__main__":
             else:
                 raise ValueError(f"Invalid parameters: {PARAMS} is not a valid JSON string or file path")
 
-        CONCAT = params.get("concatenate", False)
+        SPLIT_SEGMENTS = params.get("split_segments", False)
         SPLIT_GROUPS = params.get("split_groups", True)
         DEBUG = params.get("debug", False)
         DEBUG_DURATION = float(params.get("debug_duration"))
@@ -134,9 +134,13 @@ if __name__ == "__main__":
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
     else:
         # if params is not given, use the arguments
-        CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
+        SPLIT_SEGMENTS = (
+            True if args.static_split_segments and args.static_split_segments.lower() == "true"
+            else not args.no_split_segments
+        )
         SPLIT_GROUPS = (
-            True if args.static_split_groups and args.static_split_groups.lower() == "true" else not args.no_split_groups
+            True if args.static_split_groups and args.static_split_groups.lower() == "true"
+            else not args.no_split_groups
         )
         DEBUG = args.debug or args.static_debug.lower() == "true"
         DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
@@ -185,7 +189,7 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 
     logging.info(f"Running job dispatcher with the following parameters:")
-    logging.info(f"\tCONCATENATE RECORDINGS: {CONCAT}")
+    logging.info(f"\tSPLIT SEGMENTS: {SPLIT_SEGMENTS}")
     logging.info(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
     logging.info(f"\tDEBUG: {DEBUG}")
     logging.info(f"\tDEBUG DURATION: {DEBUG_DURATION}")
@@ -486,7 +490,7 @@ if __name__ == "__main__":
         recording_lfp = recording_dict[session_recording_name].get("lfp", None)
 
         HAS_LFP = recording_lfp is not None
-        if CONCAT:
+        if not SPLIT_SEGMENTS:
             recordings = [recording]
             recordings_lfp = [recording_lfp] if HAS_LFP else None
         else:
@@ -494,7 +498,7 @@ if __name__ == "__main__":
             recordings_lfp = si.split_recording(recording_lfp) if HAS_LFP else None
 
         for recording_index, recording in enumerate(recordings):
-            if not CONCAT:
+            if SPLIT_SEGMENTS:
                 recording_name_segment = f"{recording_name}{recording_index + 1}"
             else:
                 recording_name_segment = f"{recording_name}"
