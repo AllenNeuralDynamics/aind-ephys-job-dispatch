@@ -401,10 +401,7 @@ if __name__ == "__main__":
                         )
                         recording_name = f"{exp_stream_name}_recording"
                         recording_dict[(session_name, recording_name)] = {}
-<<<<<<< HEAD
                         recording_dict[(session_name, recording_name)]["input_folder"] = openephys_folder
-=======
->>>>>>> a30063b5b304dc8ccc0a5165e45194aac3e8fd76
                         recording_dict[(session_name, recording_name)]["raw"] = recording
 
                         # load the associated LFP stream (if available)
