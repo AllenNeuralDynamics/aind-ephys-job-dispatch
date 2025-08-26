@@ -678,7 +678,6 @@ if __name__ == "__main__":
                     input_folder=input_folder,
                     debug=DEBUG,
                 )
-                print(f"Relative to: {data_folder}")
                 rec_str = f"\t{recording_name_segment}\n\t\tDuration: {duration} s - Num. channels: {recording.get_num_channels()}"
                 if HAS_LFP:
                     job_dict["recording_lfp_dict"] = recording_lfp.to_dict(recursive=True, relative_to=data_folder)

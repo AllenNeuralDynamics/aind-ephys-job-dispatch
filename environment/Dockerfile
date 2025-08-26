@@ -1,4 +1,4 @@
-# hash:sha256:b280fe98a2f3fe8445b43ab1a631a385c610579bd249880a4c19b83116b0392a
+# hash:sha256:6e4c0a0a39febd2558d57a469dc2607ae5c198ea777bcc09516b5616e9082f4d
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/jupyterlab:3.6.1-miniconda4.12.0-python3.9-ubuntu20.04
 
@@ -6,9 +6,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG AWS_ACCESS_KEY_ID
 ARG AWS_DEFAULT_REGION
 ARG AWS_SECRET_ACCESS_KEY
-
 ARG GIT_ASKPASS
-ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
