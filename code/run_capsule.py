@@ -311,6 +311,7 @@ if __name__ == "__main__":
                                 include_annotations = True
 
                         recording_dict[(session_name, recording_name)] = {}
+                        recording_dict[(session_name, recording_name)]["input_folder"] = ecephys_session_folder
                         recording_dict[(session_name, recording_name)]["raw"] = recording
 
                         # load the associated LF stream (if available)
@@ -354,6 +355,7 @@ if __name__ == "__main__":
                     recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name)
                     recording_name = f"block{block_index}_{stream_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
+                    recording_dict[(session_name, recording_name)]["input_folder"] = spikeglx_folder
                     recording_dict[(session_name, recording_name)]["raw"] = recording
 
                     # load the associated LF stream (if available)
@@ -399,6 +401,7 @@ if __name__ == "__main__":
                         )
                         recording_name = f"{exp_stream_name}_recording"
                         recording_dict[(session_name, recording_name)] = {}
+                        recording_dict[(session_name, recording_name)]["input_folder"] = openephys_folder
                         recording_dict[(session_name, recording_name)]["raw"] = recording
 
                         # load the associated LFP stream (if available)
@@ -560,6 +563,7 @@ if __name__ == "__main__":
     logging.info("Recording to be processed in parallel:")
     for session_recording_name in recording_dict:
         session_name, recording_name = session_recording_name
+        input_folder = recording_dict[session_recording_name].get("input_folder")
         recording = recording_dict[session_recording_name]["raw"]
         recording_lfp = recording_dict[session_recording_name].get("lfp", None)
 
@@ -652,6 +656,7 @@ if __name__ == "__main__":
                         recording_dict=recording_group.to_dict(recursive=True, relative_to=data_folder),
                         skip_times=skip_times,
                         duration=duration,
+                        input_folder=input_folder,
                         debug=DEBUG,
                     )
                     rec_str = f"\t{recording_name_group}\n\t\tDuration {duration} s - Num. channels: {recording_group.get_num_channels()}"
@@ -670,6 +675,7 @@ if __name__ == "__main__":
                     recording_dict=recording.to_dict(recursive=True, include_annotations=include_annotations, relative_to=data_folder),
                     skip_times=skip_times,
                     duration=duration,
+                    input_folder=input_folder,
                     debug=DEBUG,
                 )
                 print(f"Relative to: {data_folder}")
