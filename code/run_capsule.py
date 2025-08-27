@@ -49,17 +49,17 @@ parser = argparse.ArgumentParser(description="Dispatch jobs for AIND ephys pipel
 split_segment_group = parser.add_mutually_exclusive_group()
 split_segment_help = "Whether to concatenate or split recording segments or not. Default: split segments"
 split_segment_group.add_argument("--no-split-segments", action="store_true", help=split_segment_help)
-split_segment_group.add_argument("static_split_segments", nargs="?", default="true", help=split_segment_help)
+split_segment_group.add_argument("static_split_segments", nargs="?", help=split_segment_help)
 
 split_group = parser.add_mutually_exclusive_group()
 split_help = "Whether to process different groups separately. Default: split groups"
 split_group.add_argument("--no-split-groups", action="store_true", help=split_help)
-split_group.add_argument("static_split_groups", nargs="?", default="false", help=split_help)
+split_group.add_argument("static_split_groups", nargs="?", help=split_help)
 
 debug_group = parser.add_mutually_exclusive_group()
 debug_help = "Whether to run in DEBUG mode. Default: False"
 debug_group.add_argument("--debug", action="store_true", help=debug_help)
-debug_group.add_argument("static_debug", nargs="?", default="false", help=debug_help)
+debug_group.add_argument("static_debug", nargs="?", help=debug_help)
 
 debug_duration_group = parser.add_mutually_exclusive_group()
 debug_duration_help = (
@@ -72,7 +72,7 @@ timestamps_skip_group = parser.add_mutually_exclusive_group()
 timestamps_skip_help = "Skip timestamps check"
 timestamps_skip_group.add_argument("--skip-timestamps-check", action="store_true", help=timestamps_skip_help)
 timestamps_skip_group.add_argument(
-    "static_skip_timestamps_check", nargs="?", default="false", help=timestamps_skip_help
+    "static_skip_timestamps_check", nargs="?", help=timestamps_skip_help
 )
 
 input_group = parser.add_mutually_exclusive_group()
@@ -83,7 +83,7 @@ input_group.add_argument("static_input", nargs="?", help=input_help)
 multi_session_group = parser.add_mutually_exclusive_group()
 multi_session_help = "Whether the data folder includes multiple sessions or not. Default: False"
 multi_session_group.add_argument("--multi-session", action="store_true", help=multi_session_help)
-multi_session_group.add_argument("static_multi_session", nargs="?",  default="false", help=multi_session_help)
+multi_session_group.add_argument("static_multi_session", nargs="?", help=multi_session_help)
 
 min_recording_duration = parser.add_mutually_exclusive_group()
 min_recording_duration_help = (
@@ -152,25 +152,17 @@ if __name__ == "__main__":
     else:
         # if params is not given, use the arguments
         SPLIT_SEGMENTS = (
-            True if args.static_split_segments and args.static_split_segments.lower() == "true"
+            args.static_split_segments.lower() == "true" if args.static_split_segments
             else not args.no_split_segments
         )
         SPLIT_GROUPS = (
-            True if args.static_split_groups and args.static_split_groups.lower() == "true"
+            args.static_split_groups.lower() == "true" if args.static_split_groups
             else not args.no_split_groups
         )
         DEBUG = args.debug or args.static_debug.lower() == "true"
         DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
-        SKIP_TIMESTAMPS_CHECK = (
-            True
-            if args.static_skip_timestamps_check and args.static_skip_timestamps_check.lower() == "true"
-            else args.skip_timestamps_check
-        )
-        MULTI_SESSION = (
-            True
-            if args.static_multi_session and args.static_multi_session.lower() == "true"
-            else args.multi_session
-        )
+        SKIP_TIMESTAMPS_CHECK = args.skip_timestamps_check or args.static_skip_timestamps_check.lower() == "true"
+        MULTI_SESSION = args.multi_session or args.static_multi_session.lower() == "true"
         INPUT = args.static_input or args.input
         if INPUT == "spikeinterface":
             spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
@@ -180,6 +172,7 @@ if __name__ == "__main__":
     # setup AIND logging before any other logging call
     aind_log_setup = False
 
+    ecephys_session_folders = None
     if INPUT == "aind":
         ecephys_session_folders = [
             p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
@@ -191,7 +184,7 @@ if __name__ == "__main__":
                 raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
 
 
-    if HAVE_AIND_LOG_UTILS:
+    if HAVE_AIND_LOG_UTILS and ecephys_session_folders is not None:
         # look for subject.json and data_description.json files
         ecephys_session_folder = ecephys_session_folders[0]
         subject_json = ecephys_session_folder / "subject.json"
@@ -224,6 +217,9 @@ if __name__ == "__main__":
     logging.info(f"\tMULTI SESSION: {MULTI_SESSION}")
     logging.info(f"\tINPUT: {INPUT}")
     logging.info(f"\tMIN_RECORDING_DURATION: {MIN_RECORDING_DURATION}")
+    if INPUT == "spikeinterface":
+        logging.info(f"\tSPIKEINTERFACE_INFO: {spikeinterface_info}")
+
 
     logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
@@ -458,7 +454,8 @@ if __name__ == "__main__":
                     recording_dict[(session_name, recording_name)]["raw"] = recording
 
     elif INPUT == "spikeinterface":
-        from spikeinterface.extractors import recording_extractor_full_dict, neo_recording_extractors_list
+        from spikeinterface.extractors import recording_extractor_full_dict
+        from spikeinterface.extractors.neoextractors import neo_recording_class_dict
         from probeinterface import read_probeinterface
 
         if isinstance(spikeinterface_info, dict):
@@ -520,7 +517,7 @@ if __name__ == "__main__":
             probe_paths = [None] * len(reader_kwargs_list)
 
         for probe_paths_session, session_name, reader_kwargs in zip(probe_paths, session_names, reader_kwargs_list):
-            if recording_extractor_full_dict[reader_type] in neo_recording_extractors_list:
+            if recording_extractor_full_dict[reader_type] in neo_recording_class_dict:
                 num_blocks = se.get_neo_num_blocks(reader_type, **reader_kwargs)
                 stream_names, stream_ids = se.get_neo_streams(reader_type, **reader_kwargs)
             else:
