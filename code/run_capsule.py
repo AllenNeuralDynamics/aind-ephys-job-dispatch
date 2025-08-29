@@ -159,10 +159,19 @@ if __name__ == "__main__":
             args.static_split_groups.lower() == "true" if args.static_split_groups
             else not args.no_split_groups
         )
-        DEBUG = args.debug or args.static_debug.lower() == "true"
+        DEBUG = (
+            args.static_debug.lower() == "true" if args.static_debug
+            else args.debug
+        )
         DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
-        SKIP_TIMESTAMPS_CHECK = args.skip_timestamps_check or args.static_skip_timestamps_check.lower() == "true"
-        MULTI_SESSION = args.multi_session or args.static_multi_session.lower() == "true"
+        SKIP_TIMESTAMPS_CHECK = (
+            args.static_skip_timestamps_check.lower() == "true" if args.static_skip_timestamps_check
+            else args.skip_timestamps_check
+        )
+        MULTI_SESSION = (
+            args.static_multi_session.lower() == "true" if args.static_multi_session
+            else args.multi_session
+        )
         INPUT = args.static_input or args.input
         if INPUT == "spikeinterface":
             spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
