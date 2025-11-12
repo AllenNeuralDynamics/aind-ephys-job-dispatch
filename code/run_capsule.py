@@ -46,20 +46,20 @@ results_folder = Path("../results")
 # Define argument parser
 parser = argparse.ArgumentParser(description="Dispatch jobs for AIND ephys pipeline")
 
-concat_group = parser.add_mutually_exclusive_group()
-concat_help = "Whether to concatenate recordings (segments) or not. Default: False"
-concat_group.add_argument("--concatenate", action="store_true", help=concat_help)
-concat_group.add_argument("static_concatenate", nargs="?", default="false", help=concat_help)
+split_segment_group = parser.add_mutually_exclusive_group()
+split_segment_help = "Whether to concatenate or split recording segments or not. Default: split segments"
+split_segment_group.add_argument("--no-split-segments", action="store_true", help=split_segment_help)
+split_segment_group.add_argument("static_split_segments", nargs="?", help=split_segment_help)
 
 split_group = parser.add_mutually_exclusive_group()
 split_help = "Whether to process different groups separately. Default: split groups"
 split_group.add_argument("--no-split-groups", action="store_true", help=split_help)
-split_group.add_argument("static_split_groups", nargs="?", default="false", help=split_help)
+split_group.add_argument("static_split_groups", nargs="?", help=split_help)
 
 debug_group = parser.add_mutually_exclusive_group()
 debug_help = "Whether to run in DEBUG mode. Default: False"
 debug_group.add_argument("--debug", action="store_true", help=debug_help)
-debug_group.add_argument("static_debug", nargs="?", default="false", help=debug_help)
+debug_group.add_argument("static_debug", nargs="?", help=debug_help)
 
 debug_duration_group = parser.add_mutually_exclusive_group()
 debug_duration_help = (
@@ -72,7 +72,7 @@ timestamps_skip_group = parser.add_mutually_exclusive_group()
 timestamps_skip_help = "Skip timestamps check"
 timestamps_skip_group.add_argument("--skip-timestamps-check", action="store_true", help=timestamps_skip_help)
 timestamps_skip_group.add_argument(
-    "static_skip_timestamps_check", nargs="?", default="false", help=timestamps_skip_help
+    "static_skip_timestamps_check", nargs="?", help=timestamps_skip_help
 )
 
 input_group = parser.add_mutually_exclusive_group()
@@ -83,7 +83,7 @@ input_group.add_argument("static_input", nargs="?", help=input_help)
 multi_session_group = parser.add_mutually_exclusive_group()
 multi_session_help = "Whether the data folder includes multiple sessions or not. Default: False"
 multi_session_group.add_argument("--multi-session", action="store_true", help=multi_session_help)
-multi_session_group.add_argument("static_multi_session", nargs="?",  default="false", help=multi_session_help)
+multi_session_group.add_argument("static_multi_session", nargs="?", help=multi_session_help)
 
 min_recording_duration = parser.add_mutually_exclusive_group()
 min_recording_duration_help = (
@@ -136,7 +136,7 @@ if __name__ == "__main__":
             else:
                 raise ValueError(f"Invalid parameters: {PARAMS} is not a valid JSON string or file path")
 
-        CONCAT = params.get("concatenate", False)
+        SPLIT_SEGMENTS = params.get("split_segments", False)
         SPLIT_GROUPS = params.get("split_groups", True)
         DEBUG = params.get("debug", False)
         DEBUG_DURATION = float(params.get("debug_duration"))
@@ -151,20 +151,25 @@ if __name__ == "__main__":
         MIN_RECORDING_DURATION = params.get("min_recording_duration", -1)
     else:
         # if params is not given, use the arguments
-        CONCAT = True if args.static_concatenate and args.static_concatenate.lower() == "true" else args.concatenate
-        SPLIT_GROUPS = (
-            True if args.static_split_groups and args.static_split_groups.lower() == "true" else not args.no_split_groups
+        SPLIT_SEGMENTS = (
+            args.static_split_segments.lower() == "true" if args.static_split_segments
+            else not args.no_split_segments
         )
-        DEBUG = args.debug or args.static_debug.lower() == "true"
+        SPLIT_GROUPS = (
+            args.static_split_groups.lower() == "true" if args.static_split_groups
+            else not args.no_split_groups
+        )
+        DEBUG = (
+            args.static_debug.lower() == "true" if args.static_debug
+            else args.debug
+        )
         DEBUG_DURATION = float(args.static_debug_duration or args.debug_duration)
         SKIP_TIMESTAMPS_CHECK = (
-            True
-            if args.static_skip_timestamps_check and args.static_skip_timestamps_check.lower() == "true"
+            args.static_skip_timestamps_check.lower() == "true" if args.static_skip_timestamps_check
             else args.skip_timestamps_check
         )
         MULTI_SESSION = (
-            True
-            if args.static_multi_session and args.static_multi_session.lower() == "true"
+            args.static_multi_session.lower() == "true" if args.static_multi_session
             else args.multi_session
         )
         INPUT = args.static_input or args.input
@@ -176,6 +181,7 @@ if __name__ == "__main__":
     # setup AIND logging before any other logging call
     aind_log_setup = False
 
+    ecephys_session_folders = None
     if INPUT == "aind":
         ecephys_session_folders = [
             p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
@@ -187,7 +193,7 @@ if __name__ == "__main__":
                 raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
 
 
-    if HAVE_AIND_LOG_UTILS:
+    if HAVE_AIND_LOG_UTILS and ecephys_session_folders is not None:
         # look for subject.json and data_description.json files
         ecephys_session_folder = ecephys_session_folders[0]
         subject_json = ecephys_session_folder / "subject.json"
@@ -212,7 +218,7 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 
     logging.info(f"Running job dispatcher with the following parameters:")
-    logging.info(f"\tCONCATENATE RECORDINGS: {CONCAT}")
+    logging.info(f"\tSPLIT SEGMENTS: {SPLIT_SEGMENTS}")
     logging.info(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
     logging.info(f"\tDEBUG: {DEBUG}")
     logging.info(f"\tDEBUG DURATION: {DEBUG_DURATION}")
@@ -220,6 +226,8 @@ if __name__ == "__main__":
     logging.info(f"\tMULTI SESSION: {MULTI_SESSION}")
     logging.info(f"\tINPUT: {INPUT}")
     logging.info(f"\tMIN_RECORDING_DURATION: {MIN_RECORDING_DURATION}")
+    if INPUT == "spikeinterface":
+        logging.info(f"\tSPIKEINTERFACE_INFO: {spikeinterface_info}")
 
     logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
@@ -347,7 +355,7 @@ if __name__ == "__main__":
             logging.info(f"\tSession name: {session_name}")
             logging.info(f"\tNum. streams: {len(stream_names)}")
             for stream_name in stream_names:
-                if "nidq" not in stream_name and "lf" not in stream_name:
+                if "nidq" not in stream_name and "lf" not in stream_name and "SYNC" not in stream_name:
                     recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name)
                     recording_name = f"block{block_index}_{stream_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
@@ -389,7 +397,7 @@ if __name__ == "__main__":
 
             for block_index in range(num_blocks):
                 for stream_name in stream_names:
-                    if "NI-DAQ" not in stream_name and "LFP" not in stream_name:
+                    if "NI-DAQ" not in stream_name and "LFP" not in stream_name and "SYNC" not in stream_name:
                         experiment_name = experiment_names[block_index]
                         exp_stream_name = f"{experiment_name}_{stream_name}"
                         recording = se.read_openephys(
@@ -454,7 +462,8 @@ if __name__ == "__main__":
                     recording_dict[(session_name, recording_name)]["raw"] = recording
 
     elif INPUT == "spikeinterface":
-        from spikeinterface.extractors import recording_extractor_full_dict, neo_recording_extractors_list
+        from spikeinterface.extractors import recording_extractor_full_dict
+        from spikeinterface.extractors.neoextractors import neo_recording_class_dict
         from probeinterface import read_probeinterface
 
         if isinstance(spikeinterface_info, dict):
@@ -516,7 +525,7 @@ if __name__ == "__main__":
             probe_paths = [None] * len(reader_kwargs_list)
 
         for probe_paths_session, session_name, reader_kwargs in zip(probe_paths, session_names, reader_kwargs_list):
-            if recording_extractor_full_dict[reader_type] in neo_recording_extractors_list:
+            if recording_extractor_full_dict[reader_type] in neo_recording_class_dict:
                 num_blocks = se.get_neo_num_blocks(reader_type, **reader_kwargs)
                 stream_names, stream_ids = se.get_neo_streams(reader_type, **reader_kwargs)
             else:
@@ -572,7 +581,7 @@ if __name__ == "__main__":
                 continue
 
         HAS_LFP = recording_lfp is not None
-        if CONCAT:
+        if not SPLIT_SEGMENTS:
             recordings = [recording]
             recordings_lfp = [recording_lfp] if HAS_LFP else None
         else:
@@ -580,7 +589,7 @@ if __name__ == "__main__":
             recordings_lfp = si.split_recording(recording_lfp) if HAS_LFP else None
 
         for recording_index, recording in enumerate(recordings):
-            if not CONCAT:
+            if SPLIT_SEGMENTS:
                 recording_name_segment = f"{recording_name}{recording_index + 1}"
             else:
                 recording_name_segment = f"{recording_name}"
