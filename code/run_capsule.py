@@ -356,7 +356,7 @@ if __name__ == "__main__":
             logging.info(f"\tSession name: {session_name}")
             logging.info(f"\tNum. streams: {len(stream_names)}")
             for stream_name in stream_names:
-                if "nidq" not in stream_name and "lf" not in stream_name and "SYNC" not in stream_name:
+                if not any(x in stream_name for x in ("nidq", "lf", "SYNC", "obx")):
                     recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name)
                     recording_name = f"block{block_index}_{stream_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
@@ -398,7 +398,7 @@ if __name__ == "__main__":
 
             for block_index in range(num_blocks):
                 for stream_name in stream_names:
-                    if "NI-DAQ" not in stream_name and "LFP" not in stream_name and "SYNC" not in stream_name:
+                    if not any(x in stream_name for x in ("NI-DAQ", "LFP", "SYNC", "ADC")):
                         experiment_name = experiment_names[block_index]
                         exp_stream_name = f"{experiment_name}_{stream_name}"
                         recording = se.read_openephys(
@@ -477,8 +477,11 @@ if __name__ == "__main__":
             spikeinterface_info = json.loads(spikeinterface_info)
 
         reader_type = spikeinterface_info.get("reader_type", None)
+        available_readers = list(recording_extractor_full_dict.keys())
         assert reader_type is not None, "Reader type is required"
-        assert reader_type in recording_extractor_full_dict, f"Reader type {reader_type} not supported"
+        assert reader_type in recording_extractor_full_dict, (
+            f"Reader type {reader_type} not supported. Available readers: {available_readers}"
+        )
         reader_kwargs = spikeinterface_info.get("reader_kwargs", None)
         keep_stream_substrings = spikeinterface_info.get("keep_stream_substrings", None)
         skip_stream_substrings = spikeinterface_info.get("skip_stream_substrings", None)
