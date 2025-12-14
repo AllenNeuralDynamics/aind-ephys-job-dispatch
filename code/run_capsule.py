@@ -193,7 +193,7 @@ if __name__ == "__main__":
             else args.multi_session
         )
         INPUT = args.static_input or args.input
-        NWB_FILES = args.nwb_files
+        NWB_FILES = args.static_nwb_files or args.nwb_files
         if INPUT == "spikeinterface":
             spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
