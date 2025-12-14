@@ -80,6 +80,18 @@ input_help = "Which 'loader' to use (spikeglx | openephys | nwb | spikeinterface
 input_group.add_argument("--input", default=None, help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
 input_group.add_argument("static_input", nargs="?", help=input_help)
 
+nwb_files_group = parser.add_mutually_exclusive_group()
+nwb_files_group.add_argument(
+    "--nwb-files",
+    default=None,
+    help=(
+        "Explicitly specified paths (comma-separated) to NWB files to process. "
+        "Only used if `input='nwb'`. "
+        "If not specified, these will be inferred from the `data_folder`."
+    ),
+)
+
+
 multi_session_group = parser.add_mutually_exclusive_group()
 multi_session_help = "Whether the data folder includes multiple sessions or not. Default: False"
 multi_session_group.add_argument("--multi-session", action="store_true", help=multi_session_help)
@@ -119,15 +131,6 @@ spikeinterface_info_group.add_argument(
 )
 
 parser.add_argument("--params", default=None, help="Path to the parameters file or JSON string. If given, it will override all other arguments.")
-parser.add_argument(
-    "--nwb-files",
-    default=None,
-    help=(
-        "Explicitly specified paths (comma-separated) to NWB files to process. "
-        "Only used if `input='nwb'`. "
-        "If not specified, these will be inferred from the `data_folder`."
-    ),
-)
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -183,7 +186,7 @@ if __name__ == "__main__":
             else args.multi_session
         )
         INPUT = args.static_input or args.input
-        NWB_FILES = None
+        NWB_FILES = args.nwb_files
         if INPUT == "spikeinterface":
             spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
