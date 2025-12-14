@@ -80,15 +80,22 @@ input_help = "Which 'loader' to use (spikeglx | openephys | nwb | spikeinterface
 input_group.add_argument("--input", default=None, help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
 input_group.add_argument("static_input", nargs="?", help=input_help)
 
+nwb_files_help = (
+    "Explicitly specified paths (comma-separated) to NWB files to process. "
+    "Only used if `input='nwb'`. "
+    "If not specified, these will be inferred from the `data_folder`."
+)
 nwb_files_group = parser.add_mutually_exclusive_group()
 nwb_files_group.add_argument(
     "--nwb-files",
     default=None,
-    help=(
-        "Explicitly specified paths (comma-separated) to NWB files to process. "
-        "Only used if `input='nwb'`. "
-        "If not specified, these will be inferred from the `data_folder`."
-    ),
+    help=nwb_files_help,
+)
+nwb_files_group.add_argument(
+    "static_nwb_files",
+    nargs="?",
+    default=None,
+    help=nwb_files_help,
 )
 
 
