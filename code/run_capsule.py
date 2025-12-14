@@ -448,10 +448,10 @@ if __name__ == "__main__":
                 raise ValueError("Multiple NWB files found in the data folder. Please only add one at a time")
 
         for nwb_file in nwb_files:
-            import os
+            # import os
 
-            # nwb_file = nwb_file.absolute()
-            nwb_file = os.path.abspath(nwb_file)
+            nwb_file = nwb_file.absolute()
+            # nwb_file = os.path.abspath(nwb_file)
             print(f"Processing NWB file: {nwb_file}")
             session_name = nwb_file.stem
 
