@@ -119,6 +119,15 @@ spikeinterface_info_group.add_argument(
 )
 
 parser.add_argument("--params", default=None, help="Path to the parameters file or JSON string. If given, it will override all other arguments.")
+parser.add_argument(
+    "--nwb-files",
+    default=None,
+    help=(
+        "Explicitly specified paths (comma-separated) to NWB files to process. "
+        "Only used if `input='nwb'`. "
+        "If not specified, these will be inferred from the `data_folder`."
+    ),
+)
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -143,6 +152,7 @@ if __name__ == "__main__":
         SKIP_TIMESTAMPS_CHECK = params.get("skip_timestamps_check", False)
         MULTI_SESSION = params.get("multi_session", False)
         INPUT = params.get("input")
+        NWB_FILES = params.get("nwb_files", None)
         assert INPUT is not None, "Input type is required"
         if INPUT == "spikeinterface":
             spikeinterface_info = params.get("spikeinterface_info")
@@ -173,6 +183,7 @@ if __name__ == "__main__":
             else args.multi_session
         )
         INPUT = args.static_input or args.input
+        NWB_FILES = None
         if INPUT == "spikeinterface":
             spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
@@ -423,7 +434,9 @@ if __name__ == "__main__":
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
         all_input_folders = [p for p in data_folder.iterdir() if p.is_dir()]
-        if len(all_input_folders) == 1:
+        if NWB_FILES is not None:
+            nwb_files = [Path(p) for p in NWB_FILES.split(",")]
+        elif len(all_input_folders) == 1:
             nwb_files = [p for p in all_input_folders[0].iterdir() if p.name.endswith(".nwb")]
         else:
             nwb_files = [p for p in data_folder.iterdir() if p.name.endswith(".nwb")]
@@ -435,7 +448,10 @@ if __name__ == "__main__":
                 raise ValueError("Multiple NWB files found in the data folder. Please only add one at a time")
 
         for nwb_file in nwb_files:
-            nwb_file = nwb_file.absolute()
+            import os
+
+            # nwb_file = nwb_file.absolute()
+            nwb_file = os.path.abspath(nwb_file)
             print(f"Processing NWB file: {nwb_file}")
             session_name = nwb_file.stem
 
