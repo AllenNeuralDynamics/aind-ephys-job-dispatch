@@ -80,6 +80,25 @@ input_help = "Which 'loader' to use (spikeglx | openephys | nwb | spikeinterface
 input_group.add_argument("--input", default=None, help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
 input_group.add_argument("static_input", nargs="?", help=input_help)
 
+nwb_files_help = (
+    "Explicitly specified paths (comma-separated) to NWB files to process. "
+    "Only used if `input='nwb'`. "
+    "If not specified, these will be inferred from the `data_folder`."
+)
+nwb_files_group = parser.add_mutually_exclusive_group()
+nwb_files_group.add_argument(
+    "--nwb-files",
+    default=None,
+    help=nwb_files_help,
+)
+nwb_files_group.add_argument(
+    "static_nwb_files",
+    nargs="?",
+    default=None,
+    help=nwb_files_help,
+)
+
+
 multi_session_group = parser.add_mutually_exclusive_group()
 multi_session_help = "Whether the data folder includes multiple sessions or not. Default: False"
 multi_session_group.add_argument("--multi-session", action="store_true", help=multi_session_help)
@@ -143,6 +162,7 @@ if __name__ == "__main__":
         SKIP_TIMESTAMPS_CHECK = params.get("skip_timestamps_check", False)
         MULTI_SESSION = params.get("multi_session", False)
         INPUT = params.get("input")
+        NWB_FILES = params.get("nwb_files", None)
         assert INPUT is not None, "Input type is required"
         if INPUT == "spikeinterface":
             spikeinterface_info = params.get("spikeinterface_info")
@@ -173,6 +193,7 @@ if __name__ == "__main__":
             else args.multi_session
         )
         INPUT = args.static_input or args.input
+        NWB_FILES = args.static_nwb_files or args.nwb_files
         if INPUT == "spikeinterface":
             spikeinterface_info = args.static_spikeinterface_info or args.spikeinterface_info
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
@@ -355,7 +376,7 @@ if __name__ == "__main__":
             logging.info(f"\tSession name: {session_name}")
             logging.info(f"\tNum. streams: {len(stream_names)}")
             for stream_name in stream_names:
-                if "nidq" not in stream_name and "lf" not in stream_name and "SYNC" not in stream_name:
+                if not any(x in stream_name for x in ("nidq", "lf", "SYNC", "obx")):
                     recording = se.read_spikeglx(spikeglx_folder, stream_name=stream_name)
                     recording_name = f"block{block_index}_{stream_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
@@ -397,7 +418,7 @@ if __name__ == "__main__":
 
             for block_index in range(num_blocks):
                 for stream_name in stream_names:
-                    if "NI-DAQ" not in stream_name and "LFP" not in stream_name and "SYNC" not in stream_name:
+                    if not any(x in stream_name for x in ("NI-DAQ", "LFP", "SYNC", "ADC")):
                         experiment_name = experiment_names[block_index]
                         exp_stream_name = f"{experiment_name}_{stream_name}"
                         recording = se.read_openephys(
@@ -422,7 +443,9 @@ if __name__ == "__main__":
     elif INPUT == "nwb":
         # get blocks/experiments and streams info
         all_input_folders = [p for p in data_folder.iterdir() if p.is_dir()]
-        if len(all_input_folders) == 1:
+        if NWB_FILES is not None:
+            nwb_files = [Path(p) for p in NWB_FILES.split(",")]
+        elif len(all_input_folders) == 1:
             nwb_files = [p for p in all_input_folders[0].iterdir() if p.name.endswith(".nwb")]
         else:
             nwb_files = [p for p in data_folder.iterdir() if p.name.endswith(".nwb")]
@@ -476,8 +499,11 @@ if __name__ == "__main__":
             spikeinterface_info = json.loads(spikeinterface_info)
 
         reader_type = spikeinterface_info.get("reader_type", None)
+        available_readers = list(recording_extractor_full_dict.keys())
         assert reader_type is not None, "Reader type is required"
-        assert reader_type in recording_extractor_full_dict, f"Reader type {reader_type} not supported"
+        assert reader_type in recording_extractor_full_dict, (
+            f"Reader type {reader_type} not supported. Available readers: {available_readers}"
+        )
         reader_kwargs = spikeinterface_info.get("reader_kwargs", None)
         keep_stream_substrings = spikeinterface_info.get("keep_stream_substrings", None)
         skip_stream_substrings = spikeinterface_info.get("skip_stream_substrings", None)
