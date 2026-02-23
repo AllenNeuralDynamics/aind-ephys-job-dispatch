@@ -1,0 +1,11 @@
+{
+    "reader_type": "intan",
+    "reader_kwargs": {
+        "file_path": "/home/alessio/spikeinterface_datasets/ephy_testing_data/intan/intan_rhd_test_1.rhd"
+    },
+    "keep_stream_substrings": "amplifier",
+    "skip_stream_substrings": null,
+    "probe_paths": {
+        "RHD2000 amplifier channel": "/home/alessio/Documents/Codes/allen/pipeline/codeocean/pipeline-capsules/ephys/aind-ephys-job-dispatch/probe.json"
+    }
+}
