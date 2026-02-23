@@ -1,4 +1,4 @@
-# hash:sha256:6e4c0a0a39febd2558d57a469dc2607ae5c198ea777bcc09516b5616e9082f4d
+# hash:sha256:b280fe98a2f3fe8445b43ab1a631a385c610579bd249880a4c19b83116b0392a
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/jupyterlab:3.6.1-miniconda4.12.0-python3.9-ubuntu20.04
 
