@@ -114,7 +114,8 @@ min_recording_duration.add_argument("static_min_recording_duration", nargs="?", 
 spikeinterface_info_group = parser.add_mutually_exclusive_group()
 spikeinterface_info_help = """
     A JSON path or string to specify how to parse the recording in spikeinterface, including: 
-    - 1. reader_type (required): string with the reader type (e.g. 'plexon', 'neuralynx', etc.) .
+    - 1. reader_type (required): string with the reader type (e.g. 'plexon', 'neuralynx', etc.). 
+                                 Use 'spikeinterface' for inputs that spikeinterface can directly read (binary/zarr folders, JSON files, etc.).
     - 2. reader_kwargs (optional): dictionary (or list of dicts for multi-session) with the reader kwargs (e.g. {'folder': '/path/to/folder'}).
     - 3. keep_stream_substrings (optional): string or list of strings with the stream names to load (e.g. 'AP' or ['AP', 'LFP']).
     - 4. skip_stream_substrings (optional): string (or list of strings) with substrings used to skip streams (e.g. 'NIDQ' or ['USB', 'EVTS']).
@@ -503,93 +504,110 @@ if __name__ == "__main__":
         reader_type = spikeinterface_info.get("reader_type", None)
         available_readers = list(recording_extractor_full_dict.keys())
         assert reader_type is not None, "Reader type is required"
-        assert reader_type in recording_extractor_full_dict, (
-            f"Reader type {reader_type} not supported. Available readers: {available_readers}"
-        )
-        reader_kwargs = spikeinterface_info.get("reader_kwargs", None)
-        keep_stream_substrings = spikeinterface_info.get("keep_stream_substrings", None)
-        skip_stream_substrings = spikeinterface_info.get("skip_stream_substrings", None)
-        probe_paths = spikeinterface_info.get("probe_paths", None)
-        session_names = spikeinterface_info.get("session_names", None)
 
-        if keep_stream_substrings is not None:
-            assert skip_stream_substrings is None, "You cannot use both keep_stream_substrings and skip_stream_substrings"
-            if isinstance(keep_stream_substrings, str):
-                keep_stream_substrings = [keep_stream_substrings]
+        if reader_type != "spikeinterface":
+            assert reader_type in recording_extractor_full_dict, (
+                f"Reader type {reader_type} not supported. Available readers: {available_readers}"
+            )
+            reader_kwargs = spikeinterface_info.get("reader_kwargs", None)
+            keep_stream_substrings = spikeinterface_info.get("keep_stream_substrings", None)
+            skip_stream_substrings = spikeinterface_info.get("skip_stream_substrings", None)
+            probe_paths = spikeinterface_info.get("probe_paths", None)
+            session_names = spikeinterface_info.get("session_names", None)
 
-        if skip_stream_substrings is not None:
-            assert keep_stream_substrings is None, "You cannot use both keep_stream_substrings and skip_stream_substrings"
-            if isinstance(skip_stream_substrings, str):
-                skip_stream_substrings = [skip_stream_substrings]
+            if keep_stream_substrings is not None:
+                assert skip_stream_substrings is None, "You cannot use both keep_stream_substrings and skip_stream_substrings"
+                if isinstance(keep_stream_substrings, str):
+                    keep_stream_substrings = [keep_stream_substrings]
 
-        # check if it's a neo reader
-        if isinstance(reader_kwargs, dict):
-            reader_kwargs_list = [reader_kwargs]
-        elif isinstance(reader_kwargs, list):
-            reader_kwargs_list = reader_kwargs
-        else:
-            raise ValueError("reader_kwargs should be a dict or a list of dicts")
+            if skip_stream_substrings is not None:
+                assert keep_stream_substrings is None, "You cannot use both keep_stream_substrings and skip_stream_substrings"
+                if isinstance(skip_stream_substrings, str):
+                    skip_stream_substrings = [skip_stream_substrings]
 
-        if len(reader_kwargs_list) > 1:
-            if not MULTI_SESSION:
-                raise ValueError("To use multiple sessions, you need to set the multi_session flag to True")
-
-        if session_names is not None:
-            if not isinstance(session_names, list):
-                session_names = [session_names]
-            if len(session_names) != len(reader_kwargs_list):
-                raise ValueError(
-                    "If you provide multiple session names, you need to provide one for each reader_kwargs"
-                )
-        else:
-            session_names = [f"session{i}" for i in range(len(reader_kwargs_list))]
-
-        if probe_paths is not None:
-            if isinstance(probe_paths, (str, dict)):
-                probe_paths = [probe_paths] * len(reader_kwargs_list)
-            if len(probe_paths) != len(reader_kwargs_list):
-                raise ValueError("If you provide multiple probe paths, you need to provide one for each reader_kwargs")
-        else:
-            probe_paths = [None] * len(reader_kwargs_list)
-
-        for probe_paths_session, session_name, reader_kwargs in zip(probe_paths, session_names, reader_kwargs_list):
-            if recording_extractor_full_dict[reader_type] in neo_recording_class_dict:
-                num_blocks = se.get_neo_num_blocks(reader_type, **reader_kwargs)
-                stream_names, stream_ids = se.get_neo_streams(reader_type, **reader_kwargs)
+            # check if it's a neo reader
+            if isinstance(reader_kwargs, dict):
+                reader_kwargs_list = [reader_kwargs]
+            elif isinstance(reader_kwargs, list):
+                reader_kwargs_list = reader_kwargs
             else:
-                num_blocks = 1
-                stream_names = [None]
-            for block_index in range(num_blocks):
-                for stream_name in stream_names:
-                    if stream_name is not None:
-                        if keep_stream_substrings is not None:
-                            if not any(s in stream_name for s in keep_stream_substrings):
-                                logging.info(f"\tSkipping stream {stream_name} (keep substrings: {keep_stream_substrings})")
-                                continue
-                        if skip_stream_substrings is not None:
-                            if any(s in stream_name for s in skip_stream_substrings):
-                                logging.info(f"\tSkipping stream {stream_name} (skip substrings: {skip_stream_substrings})")
-                                continue
-                        reader_kwargs["stream_name"] = stream_name
-                    logging.info(f"\tStream name: {stream_name}")
-                    recording = recording_extractor_full_dict[reader_type](**reader_kwargs)
-                    probe_path = None
-                    if probe_paths_session is not None:
-                        if isinstance(probe_paths_session, str):
-                            probe_path = probe_paths_session
-                        elif isinstance(probe_paths_session, dict):
-                            probe_path = probe_paths_session.get(stream_name, None)
-                    if probe_path is not None:
-                        probegroup = read_probeinterface(probe_path)
-                        recording = recording.set_probegroup(probegroup)
-                    probegroup = recording.get_probegroup()
-                    assert probegroup is not None, (
-                        f"Probe not specified for {stream_name}. "
-                        f"Use the 'probe_paths' field of spikeinterface-info to specify it."
+                raise ValueError("reader_kwargs should be a dict or a list of dicts")
+
+            if len(reader_kwargs_list) > 1:
+                if not MULTI_SESSION:
+                    raise ValueError("To use multiple sessions, you need to set the multi_session flag to True")
+
+            if session_names is not None:
+                if not isinstance(session_names, list):
+                    session_names = [session_names]
+                if len(session_names) != len(reader_kwargs_list):
+                    raise ValueError(
+                        "If you provide multiple session names, you need to provide one for each reader_kwargs"
                     )
-                    recording_name = f"block{block_index}_{stream_name}_recording"
+            else:
+                session_names = [f"session{i}" for i in range(len(reader_kwargs_list))]
+
+            if probe_paths is not None:
+                if isinstance(probe_paths, (str, dict)):
+                    probe_paths = [probe_paths] * len(reader_kwargs_list)
+                if len(probe_paths) != len(reader_kwargs_list):
+                    raise ValueError("If you provide multiple probe paths, you need to provide one for each reader_kwargs")
+            else:
+                probe_paths = [None] * len(reader_kwargs_list)
+
+            for probe_paths_session, session_name, reader_kwargs in zip(probe_paths, session_names, reader_kwargs_list):
+                if recording_extractor_full_dict[reader_type] in neo_recording_class_dict:
+                    num_blocks = se.get_neo_num_blocks(reader_type, **reader_kwargs)
+                    stream_names, stream_ids = se.get_neo_streams(reader_type, **reader_kwargs)
+                else:
+                    num_blocks = 1
+                    stream_names = [None]
+                for block_index in range(num_blocks):
+                    for stream_name in stream_names:
+                        if stream_name is not None:
+                            if keep_stream_substrings is not None:
+                                if not any(s in stream_name for s in keep_stream_substrings):
+                                    logging.info(f"\tSkipping stream {stream_name} (keep substrings: {keep_stream_substrings})")
+                                    continue
+                            if skip_stream_substrings is not None:
+                                if any(s in stream_name for s in skip_stream_substrings):
+                                    logging.info(f"\tSkipping stream {stream_name} (skip substrings: {skip_stream_substrings})")
+                                    continue
+                            reader_kwargs["stream_name"] = stream_name
+                        logging.info(f"\tStream name: {stream_name}")
+                        recording = recording_extractor_full_dict[reader_type](**reader_kwargs)
+                        probe_path = None
+                        if probe_paths_session is not None:
+                            if isinstance(probe_paths_session, str):
+                                probe_path = probe_paths_session
+                            elif isinstance(probe_paths_session, dict):
+                                probe_path = probe_paths_session.get(stream_name, None)
+                        if probe_path is not None:
+                            probegroup = read_probeinterface(probe_path)
+                            recording = recording.set_probegroup(probegroup)
+                        probegroup = recording.get_probegroup()
+                        assert probegroup is not None, (
+                            f"Probe not specified for {stream_name}. "
+                            f"Use the 'probe_paths' field of spikeinterface-info to specify it."
+                        )
+                        recording_name = f"block{block_index}_{stream_name}_recording"
+                        recording_dict[(session_name, recording_name)] = {}
+                        recording_dict[(session_name, recording_name)]["raw"] = recording
+        else:
+            # We try to find SpikeInterface-readable folders/files in the data folder and load them with the spikeinterface reader
+            potential_si_datasets = [p for p in data_folder.iterdir() if p.is_dir()]
+            if len(potential_si_datasets) == 0:
+                potential_si_datasets = [p for p in data_folder.iterdir() if p.is_file() and p.suffix in [".json", ".pkl"]]
+            for potential_si_dataset in potential_si_datasets:
+                try:
+                    recording = si.load(str(potential_si_dataset))
+                    session_name = potential_si_dataset.stem
+                    recording_name = f"block{0}_{session_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["raw"] = recording
+                    logging.info(f"Loaded SpikeInterface dataset from {potential_si_dataset}")
+                except Exception as e:
+                    logging.info(f"Could not load {potential_si_dataset} with SpikeInterface: {e}")
 
     # populate job dict list
     job_dict_list = []
