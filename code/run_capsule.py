@@ -598,6 +598,7 @@ if __name__ == "__main__":
             potential_si_datasets = [p for p in data_folder.iterdir() if p.is_dir()]
             if len(potential_si_datasets) == 0:
                 potential_si_datasets = [p for p in data_folder.iterdir() if p.is_file() and p.suffix in [".json", ".pkl"]]
+            logging.info(f"Potential SpikeInterface datasets found in the data folder: {potential_si_datasets}")
             for potential_si_dataset in potential_si_datasets:
                 try:
                     recording = si.load(str(potential_si_dataset))
