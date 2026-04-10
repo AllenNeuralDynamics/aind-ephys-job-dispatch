@@ -596,6 +596,11 @@ if __name__ == "__main__":
         else:
             # We try to find SpikeInterface-readable folders/files in the data folder and load them with the spikeinterface reader
             potential_si_datasets = [p for p in data_folder.iterdir() if p.is_dir()]
+            if len(potential_si_datasets) == 1:
+                # also grab subfolders if there's only one potential dataset to give more chances to find the right folder
+                potential_si_subfolders = [p for p in potential_si_datasets[0].iterdir() if p.is_dir()]
+                potential_si_datasets.extend(potential_si_subfolders)
+
             if len(potential_si_datasets) == 0:
                 potential_si_datasets = [p for p in data_folder.iterdir() if p.is_file() and p.suffix in [".json", ".pkl"]]
             logging.info(f"Potential SpikeInterface datasets found in the data folder: {potential_si_datasets}")
