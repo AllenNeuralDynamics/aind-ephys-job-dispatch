@@ -603,15 +603,18 @@ if __name__ == "__main__":
 
             if len(potential_si_datasets) == 0:
                 potential_si_datasets = [p for p in data_folder.iterdir() if p.is_file() and p.suffix in [".json", ".pkl"]]
+            # We consider folders as a single session, with multiple blocks if there are multiple datasets
             logging.info(f"Potential SpikeInterface datasets found in the data folder: {potential_si_datasets}")
+            block_index = 0
+            session_name = "session1"
             for potential_si_dataset in potential_si_datasets:
                 try:
                     recording = si.load(str(potential_si_dataset))
-                    session_name = potential_si_dataset.stem
-                    recording_name = f"block{0}_{session_name}_recording"
+                    recording_name = f"block{block_index}_stream0_recording"
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["raw"] = recording
                     logging.info(f"Loaded SpikeInterface dataset from {potential_si_dataset}")
+                    block_index += 1
                 except Exception as e:
                     logging.info(f"Could not load {potential_si_dataset} with SpikeInterface: {e}")
 
