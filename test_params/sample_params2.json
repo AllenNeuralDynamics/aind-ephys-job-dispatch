@@ -1,0 +1,41 @@
+{
+    "input": "spikeinterface",
+    "concatenate": false,
+    "split_groups": true,
+    "debug": false,
+    "debug_duration": 30,
+    "skip_timestamps_check": false,
+    "multi_session": true,
+    "spikeinterface_info": {
+        "reader_type": "intan",
+        "reader_kwargs": [
+                {
+                    "file_path": "/home/alessio/spikeinterface_datasets/ephy_testing_data/intan/intan_rhd_test_1.rhd"
+                },
+                {
+                    "file_path": "/home/alessio/spikeinterface_datasets/ephy_testing_data/intan/intan_rhd_test_1.rhd"
+                },
+                {
+                    "file_path": "/home/alessio/spikeinterface_datasets/ephy_testing_data/intan/intan_rhd_test_1.rhd"
+                }
+        ],
+        "keep_stream_substrings": "amplifier",
+        "skip_stream_substrings": null,
+        "probe_paths": [
+                {
+                    "RHD2000 amplifier channel": "/home/alessio/Documents/Codes/allen/pipeline/codeocean/pipeline-capsules/ephys/aind-ephys-job-dispatch/probe.json"
+                },
+                {
+                    "RHD2000 amplifier channel": "/home/alessio/Documents/Codes/allen/pipeline/codeocean/pipeline-capsules/ephys/aind-ephys-job-dispatch/probe.json"
+                },
+                {
+                    "RHD2000 amplifier channel": "/home/alessio/Documents/Codes/allen/pipeline/codeocean/pipeline-capsules/ephys/aind-ephys-job-dispatch/probe.json"
+                }
+        ],
+        "session_names": [
+            "session_A",
+            "session_B",
+            "session_C"
+        ]
+    }
+}

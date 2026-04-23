@@ -1,0 +1,9 @@
+{
+    "input": "spikeglx",
+    "concatenate": false,
+    "split_groups": true,
+    "debug": false,
+    "debug_duration": 30,
+    "skip_timestamps_check": false,
+    "spikeinterface_info": null
+}
