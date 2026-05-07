@@ -1,13 +1,15 @@
-# hash:sha256:b280fe98a2f3fe8445b43ab1a631a385c610579bd249880a4c19b83116b0392a
+# hash:sha256:15c9e879a450c6d284c112263e9ac49248d5fcbee5a01c8662fe60e91a981902
 ARG REGISTRY_HOST
-FROM $REGISTRY_HOST/codeocean/jupyterlab:3.6.1-miniconda4.12.0-python3.9-ubuntu20.04
+FROM $REGISTRY_HOST/codeocean/mambaforge3:24.5.0-0-python3.12.4-ubuntu22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG AWS_ACCESS_KEY_ID
-ARG AWS_DEFAULT_REGION
-ARG AWS_SECRET_ACCESS_KEY
 ARG GIT_ASKPASS
-COPY git-askpass /
+COPY git-ask-pass /
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential=12.9ubuntu3 \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN pip install -U --no-cache-dir \
     aind-log-utils==0.2.3 \
