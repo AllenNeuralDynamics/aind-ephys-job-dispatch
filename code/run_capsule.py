@@ -594,16 +594,18 @@ if __name__ == "__main__":
                         recording_dict[(session_name, recording_name)] = {}
                         recording_dict[(session_name, recording_name)]["raw"] = recording
         else:
-            # We try to find SpikeInterface-readable folders/files in the data folder and load them with the spikeinterface reader
+            # We try to find SpikeInterface-readable folders/files in the data folder and load them with the 
+            # SpikeInterface reader. If the data_folder has a single folder, we also look for SpikeInterface-readable 
+            # sub-folders in that folder to give more chances to find the right folder.
+            # If no folders are found, we look for files (e.g. JSON or pickle files with the recording information)
+            # We consider potential datasets as a single session, with multiple blocks if there are multiple datasets
             potential_si_datasets = [p for p in data_folder.iterdir() if p.is_dir()]
             if len(potential_si_datasets) == 1:
-                # also grab subfolders if there's only one potential dataset to give more chances to find the right folder
                 potential_si_subfolders = [p for p in potential_si_datasets[0].iterdir() if p.is_dir()]
                 potential_si_datasets.extend(potential_si_subfolders)
-
             if len(potential_si_datasets) == 0:
                 potential_si_datasets = [p for p in data_folder.iterdir() if p.is_file() and p.suffix in [".json", ".pkl"]]
-            # We consider folders as a single session, with multiple blocks if there are multiple datasets
+
             logging.info(f"Potential SpikeInterface datasets found in the data folder: {potential_si_datasets}")
             block_index = 0
             session_name = "session1"
@@ -616,7 +618,7 @@ if __name__ == "__main__":
                     logging.info(f"Loaded SpikeInterface dataset from {potential_si_dataset}")
                     block_index += 1
                 except Exception as e:
-                    logging.info(f"Could not load {potential_si_dataset} with SpikeInterface: {e}")
+                    pass
 
     # populate job dict list
     job_dict_list = []
