@@ -620,6 +620,9 @@ if __name__ == "__main__":
                 except Exception as e:
                     pass
 
+    if len(recording_dict) == 0:
+        raise Exception("No recordings found to process after parsing the input folder!")
+
     # populate job dict list
     job_dict_list = []
     logging.info("Recording to be processed in parallel:")
