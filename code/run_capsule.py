@@ -159,7 +159,9 @@ if __name__ == "__main__":
         SPLIT_SEGMENTS = params.get("split_segments", False)
         SPLIT_GROUPS = params.get("split_groups", True)
         DEBUG = params.get("debug", False)
-        DEBUG_DURATION = float(params.get("debug_duration"))
+        DEBUG_DURATION = params.get("debug_duration")
+        if DEBUG_DURATION is not None:
+            DEBUG_DURATION = float(DEBUG_DURATION)
         SKIP_TIMESTAMPS_CHECK = params.get("skip_timestamps_check", False)
         MULTI_SESSION = params.get("multi_session", False)
         INPUT = params.get("input")
@@ -684,6 +686,8 @@ if __name__ == "__main__":
                 recording.reset_times()
 
             if DEBUG:
+                if DEBUG_DURATION is None:
+                    raise ValueError("debug_duration parameter must be provided when debug is True")
                 recording_list = []
                 for segment_index in range(recording.get_num_segments()):
                     recording_one = si.split_recording(recording)[segment_index]
