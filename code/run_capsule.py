@@ -485,6 +485,12 @@ if __name__ == "__main__":
                             f"{recording.sampling_frequency} Hz). Skipping"
                         )
                         continue
+                    if not recording.has_channel_location():
+                        logging.info(
+                            f"\t\t{electrical_series_path} does not have probe information. Skipping. "
+                            "Make sure to include the probe information in the NWB file or use the spikeinterface loader with the appropriate probe_paths parameter."
+                        )
+                        continue
                     recording_name = f"block{block_index}_{stream_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["raw"] = recording
