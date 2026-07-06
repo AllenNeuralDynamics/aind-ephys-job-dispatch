@@ -313,7 +313,12 @@ if __name__ == "__main__":
                                 ecephys_openephys_folder, stream_name=stream_name, block_index=block_index
                             )
                         else:
-                            recording = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name}.zarr")
+                            zarr_path = ecephys_compressed_folder / f"{exp_stream_name}.zarr"
+                            if zarr_path.is_dir():
+                                recording = si.read_zarr(zarr_path)
+                            else:
+                                # Zarr path could be missing in case of empty streams
+                                continue
                         recording_name = f"{exp_stream_name}_recording"
 
                         # fix probe information in case of missing names
