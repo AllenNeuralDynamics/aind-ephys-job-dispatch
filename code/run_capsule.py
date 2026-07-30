@@ -499,6 +499,58 @@ if __name__ == "__main__":
                     recording_name = f"block{block_index}_{stream_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["raw"] = recording
+                    # Since NWB files currently only load locations, we also need to load the probe information from
+                    # the NWB file to get the probe name and other metadata. This is fixed in 0.105 since the probe is
+                    # dumped to the dict.
+                    from pynwb import NWBHDF5IO
+
+                    group_names = np.unique(recording.get_channel_groups())
+                    try:
+                        with NWBHDF5IO(str(nwb_file), "r", load_namespaces=True) as io:
+                            nwbfile = io.read()
+                            devices = {nwbfile.electrode_groups[group_name].device for group_name in group_names}
+                            assert len(devices) == 1, (
+                                f"Found multiple devices associated to {electrical_series_path}: "
+                                f"{sorted(d.name for d in devices)}. Expected a single probe/device."
+                            )
+                            device = devices.pop()
+                            device_name = device.name
+                            device_manufacturer = device.manufacturer
+                            device_description = device.description
+                            locations_by_group = {
+                                group_name: nwbfile.electrode_groups[group_name].location
+                                for group_name in group_names
+                            }
+
+                        unique_locations = set(locations_by_group.values())
+                        electrode_group_location = unique_locations.pop() if len(unique_locations) == 1 else None
+
+                        locations = recording.get_channel_locations()
+                        probe = pi.Probe(
+                            ndim=2,
+                            si_units="um",
+                            name=device_name,
+                            manufacturer=device_manufacturer,
+                        )
+                        probe.set_contacts(
+                            positions=locations,
+                            shapes="circle",
+                            shape_params={"radius": 5},
+                            contact_ids=recording.get_channel_ids(),
+                        )
+                        probe.set_device_channel_indices(np.arange(recording.get_num_channels()))
+                        if len(group_names) > 1:
+                            probe.set_shank_ids(recording.get_channel_groups())
+                        if device_description is not None:
+                            probe.annotate(description=device_description)
+                        if electrode_group_location is not None:
+                            probe.annotate(electrode_group_location=electrode_group_location)
+                        recording_dict[(session_name, recording_name)]["probe"] = probe
+                    except Exception as e:
+                        logging.info(
+                            f"\t\tCould not retrieve probe/device information from ElectrodeGroups for "
+                            f"{electrical_series_path}: {e}"
+                        )
 
     elif INPUT == "spikeinterface":
         from spikeinterface.extractors import recording_extractor_full_dict
@@ -644,6 +696,7 @@ if __name__ == "__main__":
         input_folder = recording_dict[session_recording_name].get("input_folder")
         recording = recording_dict[session_recording_name]["raw"]
         recording_lfp = recording_dict[session_recording_name].get("lfp", None)
+        probe = recording_dict[session_recording_name].get("probe", None)
 
         if MIN_RECORDING_DURATION != -1:
             duration = recording.get_total_duration()
@@ -654,6 +707,7 @@ if __name__ == "__main__":
                 continue
 
         HAS_LFP = recording_lfp is not None
+        HAS_EXTRA_PROBE = probe is not None
         if not SPLIT_SEGMENTS:
             recordings = [recording]
             recordings_lfp = [recording_lfp] if HAS_LFP else None
@@ -746,6 +800,9 @@ if __name__ == "__main__":
                             recursive=True, relative_to=data_folder
                         )
                         rec_str += f" (with LFP stream)"
+                    if HAS_EXTRA_PROBE:
+                        # Here we save the whole probe, since we only need it post-aggregation
+                        job_dict["probe_dict"] = probe.to_dict()
                     logging.info(rec_str)
                     job_dict_list.append(job_dict)
             else:
@@ -762,6 +819,8 @@ if __name__ == "__main__":
                 if HAS_LFP:
                     job_dict["recording_lfp_dict"] = recording_lfp.to_dict(recursive=True, relative_to=data_folder)
                     rec_str += f" (with LFP stream)"
+                if HAS_EXTRA_PROBE:
+                    job_dict["probe_dict"] = probe.to_dict()
                 logging.info(rec_str)
                 job_dict_list.append(job_dict)
 
