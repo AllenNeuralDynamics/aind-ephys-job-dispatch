@@ -34,9 +34,7 @@ except ImportError:
 ACCEPTED_NEGATIVE_DEVIATION_MS = 0.2  # we allow for small negative timestamps diff glitches
 MAX_NUM_NEGATIVE_TIMESTAMPS = 10  # maximum number of negative timestamps allowed below the accepted deviation
 ABS_MAX_TIMESTAMPS_DEVIATION_MS = 2  # absolute maximum deviation allowed for timestamps (also positive)
-
-MAX_NUM_NEGATIVE_TIMESTAMPS = 10
-MAX_TIMESTAMPS_DEVIATION_MS = 1
+MAX_PERCENT_ZERO_TIMESTAMPS_DIFF = 0.02  # percent of zero timestamps diff allowes
 
 
 data_folder = Path("../data")
@@ -726,24 +724,30 @@ if __name__ == "__main__":
 
             # timestamps should be monotonically increasing, but we allow for small glitches
             skip_times = False
+            skip_times_msg = ""
             if not SKIP_TIMESTAMPS_CHECK:
                 for segment_index in range(recording.get_num_segments()):
                     times = recording.get_times(segment_index=segment_index)
                     times_diff_ms = np.diff(times) * 1000
                     num_negative_times = np.sum(times_diff_ms < -ACCEPTED_NEGATIVE_DEVIATION_MS)
 
+                    # Check for negative timestamps
                     if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
-                        logging.info(
-                            f"\t{recording_name}:\n\t\tSkipping timestamps for too many negative "
-                            f"timestamps diffs below {ACCEPTED_NEGATIVE_DEVIATION_MS}: {num_negative_times}"
+                        skip_times_msg = (
+                            f"too many negative timestamps diffs below {ACCEPTED_NEGATIVE_DEVIATION_MS}: {num_negative_times}"
                         )
                         skip_times = True
                         break
+                    # Check for max timestamp gaps
                     max_time_diff_ms = np.max(np.abs(times_diff_ms))
                     if max_time_diff_ms > ABS_MAX_TIMESTAMPS_DEVIATION_MS:
-                        logging.info(
-                            f"\t{recording_name}:\n\t\tSkipping timestamps for too large time diff deviation: {max_time_diff_ms} ms"
-                        )
+                        skip_times_msg = f"too large time diff deviation: {max_time_diff_ms} ms"
+                        skip_times = True
+                        break
+                    # Check for 0 timestamps diff
+                    num_zero_diffs = np.sum(times_diff_ms == 0)
+                    if num_zero_diffs >= MAX_PERCENT_ZERO_TIMESTAMPS_DIFF * len(times_diff_ms):
+                        skip_times_msg = f"too many zero diffs: {num_zero_diffs}/{len(times_diff_ms)}"
                         skip_times = True
                         break
 
@@ -780,48 +784,56 @@ if __name__ == "__main__":
 
             duration = np.round(recording.get_total_duration(), 2)
 
-            # if multiple channel groups, process in parallel
+            # If multiple channel groups, process in parallel
+            # a group name of None means the recording is not split
             if SPLIT_GROUPS and len(np.unique(recording.get_channel_groups())) > 1:
-                for group_name, recording_group in recording.split_by("group").items():
-                    recording_name_group = f"{recording_name_segment}_group{group_name}"
-                    job_dict = dict(
-                        session_name=session_name,
-                        recording_name=str(recording_name_group),
-                        recording_dict=recording_group.to_dict(recursive=True, relative_to=data_folder),
-                        skip_times=skip_times,
-                        duration=duration,
-                        input_folder=input_folder,
-                        debug=DEBUG,
-                    )
-                    rec_str = f"\t{recording_name_group}\n\t\tDuration {duration} s - Num. channels: {recording_group.get_num_channels()}"
-                    if HAS_LFP:
-                        recording_lfp_group = recording_lfp.split_by("group")[group_name]
-                        job_dict["recording_lfp_dict"] = recording_lfp_group.to_dict(
-                            recursive=True, relative_to=data_folder
+                groups = recording.split_by("group")
+                groups_lfp = {}
+                if HAS_LFP:
+                    groups_lfp = recording_lfp.split_by("group")
+                    # AP and LFP are the same physical channels, so their groups should match.
+                    # If they don't, we drop the LFP stream for the groups that are missing.
+                    missing_lfp_groups = set(groups) - set(groups_lfp)
+                    if missing_lfp_groups:
+                        logging.warning(
+                            f"\t{recording_name_segment}: AP and LFP channel groups differ - "
+                            f"skipping LFP stream for group(s) {sorted(missing_lfp_groups)}"
                         )
-                        rec_str += f" (with LFP stream)"
-                    if HAS_EXTRA_PROBE:
-                        # Here we save the whole probe, since we only need it post-aggregation
-                        job_dict["probe_dict"] = probe.to_dict()
-                    logging.info(rec_str)
-                    job_dict_list.append(job_dict)
             else:
+                groups = {None: recording}
+                groups_lfp = {None: recording_lfp} if HAS_LFP else {}
+
+            for group_name, recording_group in groups.items():
+                if group_name is not None:
+                    recording_name_group = f"{recording_name_segment}_group{group_name}"
+                else:
+                    recording_name_group = recording_name_segment
                 job_dict = dict(
                     session_name=session_name,
-                    recording_name=str(recording_name_segment),
-                    recording_dict=recording.to_dict(recursive=True, include_annotations=include_annotations, relative_to=data_folder),
+                    recording_name=str(recording_name_group),
+                    recording_dict=recording_group.to_dict(
+                        recursive=True, include_annotations=include_annotations, relative_to=data_folder
+                    ),
                     skip_times=skip_times,
                     duration=duration,
                     input_folder=input_folder,
                     debug=DEBUG,
                 )
-                rec_str = f"\t{recording_name_segment}\n\t\tDuration: {duration} s - Num. channels: {recording.get_num_channels()}"
-                if HAS_LFP:
-                    job_dict["recording_lfp_dict"] = recording_lfp.to_dict(recursive=True, relative_to=data_folder)
+                rec_str = (
+                    f"\t{recording_name_group}\n\t\tDuration: {duration} s - "
+                    f"Num. channels: {recording_group.get_num_channels()}"
+                )
+                if group_name in groups_lfp:
+                    job_dict["recording_lfp_dict"] = groups_lfp[group_name].to_dict(
+                        recursive=True, relative_to=data_folder
+                    )
                     rec_str += f" (with LFP stream)"
                 if HAS_EXTRA_PROBE:
+                    # Here we save the whole probe, since we only need it post-aggregation
                     job_dict["probe_dict"] = probe.to_dict()
                 logging.info(rec_str)
+                if skip_times:
+                    logging.info(f"\t\tResetting timestamps: {skip_times_msg}")
                 job_dict_list.append(job_dict)
 
     if not results_folder.is_dir():
