@@ -21,13 +21,6 @@ from spikeinterface.core.core_tools import SIJsonEncoder
 
 import probeinterface as pi
 
-# try:
-#     from aind_log_utils import log
-
-#     HAVE_AIND_LOG_UTILS = True
-# except ImportError:
-#     HAVE_AIND_LOG_UTILS = False
-
 
 # here we define some constants used for defining if timestamps are ok
 # or should be skipped
@@ -225,9 +218,11 @@ if __name__ == "__main__":
                         data_description = json.load(f)
                     acquisition_name = data_description["name"]
 
-            config = LOGGING.get("logging_cfg", {})
+            config = LOGGING.get("logging_cfg")
+            if config is not None and len(config) == 0:
+                config = None
             log_schema.setup_logging(
-                config=LOGGING.get("logging_cfg", {}),
+                config=config,
                 model={
                     "pipeline_name": pipeline_name,
                     "acquisition_name": acquisition_name,
