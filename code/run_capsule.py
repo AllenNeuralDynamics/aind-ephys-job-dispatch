@@ -251,6 +251,15 @@ if __name__ == "__main__":
     recording_dict = {}
     include_annotations = False
     if INPUT == "aind":
+        ecephys_session_folders = [
+            p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
+        ]
+        if len(ecephys_session_folders) == 0:
+            raise Exception("No valid ecephys sessions found.")
+        elif len(ecephys_session_folders) > 1:
+            if not MULTI_SESSION:
+                raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
+
         for ecephys_session_folder in ecephys_session_folders:
             session_name = None
             if (ecephys_session_folder / "data_description.json").is_file():
