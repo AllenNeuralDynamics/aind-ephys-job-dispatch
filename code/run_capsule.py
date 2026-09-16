@@ -332,7 +332,6 @@ if __name__ == "__main__":
 
                         # load the associated LF stream (if available)
                         if "AP" in openephys_stream_name:
-                            stream_name_lf = openephys_stream_name.replace("AP", "LFP")
                             lf_stream_name = full_stream_name.replace("AP", "LFP")
                             try:
                                 recording_lf = si.read_zarr(ecephys_compressed_folder / f"{lf_stream_name}.zarr")
