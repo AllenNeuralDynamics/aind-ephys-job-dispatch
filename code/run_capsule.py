@@ -292,13 +292,14 @@ if __name__ == "__main__":
                 experiment_name = full_stream_name.split("_")[0]
                 experiment_number = int(experiment_name.replace("experiment", ""))
                 openephys_stream_name = "_".join(full_stream_name.split("_")[1:])
-                if "NI-DAQ" not in openephys_stream_name and "LFP" not in openephys_stream_name and "Rhythm" not in openephys_stream_name:
-                    if zarr_path.is_dir():
-                        recording = si.read_zarr(zarr_path)
-                    else:
-                        # Zarr path could be missing in case of empty streams
-                        continue
-                    recording_name = f"{openephys_stream_name}_recording"
+                is_ap_stream = (
+                    "NI-DAQ" not in openephys_stream_name and
+                    "LFP" not in openephys_stream_name and 
+                    "Rhythm" not in openephys_stream_name
+                )
+                if is_ap_stream:
+                    recording_name = f"{full_stream_name}_recording"
+                    recording = si.read_zarr(zarr_path)
 
                     # Fix probe information in case of missing names
                     updated_probe = None
@@ -322,24 +323,25 @@ if __name__ == "__main__":
                                 record_node_folder / settings_name,
                                 stream_name=openephys_stream_name
                             )
+                            # TODO: remove in v0.105.0 since probe is dumped in dict by default
                             recording.set_probe(updated_probe, in_place=True)
                             # make sure we the updated annotations when dumping the dict!
                             include_annotations = True
 
-                        recording_dict[(session_name, recording_name)] = {}
-                        recording_dict[(session_name, recording_name)]["input_folder"] = ecephys_session_folder
-                        recording_dict[(session_name, recording_name)]["raw"] = recording
+                    recording_dict[(session_name, recording_name)] = {}
+                    recording_dict[(session_name, recording_name)]["input_folder"] = ecephys_session_folder
+                    recording_dict[(session_name, recording_name)]["raw"] = recording
 
-                        # load the associated LF stream (if available)
-                        if "AP" in openephys_stream_name:
-                            lf_stream_name = full_stream_name.replace("AP", "LFP")
-                            try:
-                                recording_lf = si.read_zarr(ecephys_compressed_folder / f"{lf_stream_name}.zarr")
-                                if updated_probe is not None:
-                                    recording_lf.set_probe(updated_probe, in_place=True)
-                                recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
-                            except:
-                                logging.info(f"\t\tNo LFP stream found for {openephys_stream_name}")
+                    # load the associated LF stream (if available)
+                    if "AP" in openephys_stream_name:
+                        lf_stream_name = full_stream_name.replace("AP", "LFP")
+                        try:
+                            recording_lf = si.read_zarr(ecephys_compressed_folder / f"{lf_stream_name}.zarr")
+                            if updated_probe is not None:
+                                recording_lf.set_probe(updated_probe, in_place=True)
+                            recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                        except:
+                            logging.info(f"\t\tNo LFP stream found for {openephys_stream_name}")
 
     elif INPUT == "spikeglx":
         # get blocks/experiments and streams info
