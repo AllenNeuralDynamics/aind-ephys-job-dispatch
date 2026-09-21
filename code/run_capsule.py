@@ -282,7 +282,7 @@ if __name__ == "__main__":
             logging.info(f"\tOpen Ephys folder: {str(ecephys_openephys_folder)}")
             logging.info(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
 
-            zarr_paths = [p for p in ecephys_compressed_folder.iterdir() if p.is_dir() and p.name.endswith(".zarr")]
+            zarr_paths = sorted([p for p in ecephys_compressed_folder.iterdir() if p.is_dir() and p.name.endswith(".zarr")])
 
             logging.info(f"\tNum. zarr folders {len(zarr_paths)}")
             for zarr_path in zarr_paths:
