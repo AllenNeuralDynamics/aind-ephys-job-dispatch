@@ -522,7 +522,7 @@ if __name__ == "__main__":
                             probe.annotate(description=device_description)
                         if electrode_group_location is not None:
                             probe.annotate(electrode_group_location=electrode_group_location)
-                        recording_dict[(session_name, recording_name)]["probe"] = probe
+                        recording.set_probe(probe)
                     except Exception as e:
                         logging.info(
                             f"\t\tCould not retrieve probe/device information from ElectrodeGroups for "
@@ -673,7 +673,6 @@ if __name__ == "__main__":
         input_folder = recording_dict[session_recording_name].get("input_folder")
         recording = recording_dict[session_recording_name]["raw"]
         recording_lfp = recording_dict[session_recording_name].get("lfp", None)
-        probe = recording_dict[session_recording_name].get("probe", None)
 
         if MIN_RECORDING_DURATION != -1:
             duration = recording.get_total_duration()
@@ -684,7 +683,6 @@ if __name__ == "__main__":
                 continue
 
         HAS_LFP = recording_lfp is not None
-        HAS_EXTRA_PROBE = probe is not None
         if not SPLIT_SEGMENTS:
             recordings = [recording]
             recordings_lfp = [recording_lfp] if HAS_LFP else None
@@ -807,9 +805,6 @@ if __name__ == "__main__":
                         recursive=True, relative_to=data_folder
                     )
                     rec_str += f" (with LFP stream)"
-                if HAS_EXTRA_PROBE:
-                    # Here we save the whole probe, since we only need it post-aggregation
-                    job_dict["probe_dict"] = probe.to_dict()
                 logging.info(rec_str)
                 if skip_times:
                     logging.info(f"\t\tResetting timestamps: {skip_times_msg}")
