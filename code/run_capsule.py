@@ -21,13 +21,6 @@ from spikeinterface.core.core_tools import SIJsonEncoder
 
 import probeinterface as pi
 
-try:
-    from aind_log_utils import log
-
-    HAVE_AIND_LOG_UTILS = True
-except ImportError:
-    HAVE_AIND_LOG_UTILS = False
-
 
 # here we define some constants used for defining if timestamps are ok
 # or should be skipped
@@ -138,11 +131,13 @@ spikeinterface_info_group.add_argument(
 
 parser.add_argument("--params", default=None, help="Path to the parameters file or JSON string. If given, it will override all other arguments.")
 
-if __name__ == "__main__":
+def run() -> None:
+    """Entrypoint for the job dispatch capsule."""
     args = parser.parse_args()
 
     # if params is given, override all other arguments
     PARAMS = args.params
+    LOGGING = None
     if PARAMS is not None:
         # try to parse the JSON string first to avoid file name too long error
         try:
@@ -170,6 +165,7 @@ if __name__ == "__main__":
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
         MULTI_SESSION = params.get("multi_session", False)
         MIN_RECORDING_DURATION = params.get("min_recording_duration", -1)
+        LOGGING = params.get("logging", None)
     else:
         # if params is not given, use the arguments
         SPLIT_SEGMENTS = (
@@ -203,45 +199,40 @@ if __name__ == "__main__":
         MIN_RECORDING_DURATION = float(args.static_min_recording_duration or args.min_recording_duration)
 
     # setup AIND logging before any other logging call
-    aind_log_setup = False
-
-    ecephys_session_folders = None
-    if INPUT == "aind":
-        ecephys_session_folders = [
-            p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
-        ]
-        if len(ecephys_session_folders) == 0:
-            raise Exception("No valid ecephys sessions found.")
-        elif len(ecephys_session_folders) > 1:
-            if not MULTI_SESSION:
-                raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
-
-
-    if HAVE_AIND_LOG_UTILS and ecephys_session_folders is not None:
-        # look for subject.json and data_description.json files
-        ecephys_session_folder = ecephys_session_folders[0]
-        subject_json = ecephys_session_folder / "subject.json"
-        subject_id = "undefined"
-        if subject_json.is_file():
-            subject_data = json.load(open(subject_json, "r"))
-            subject_id = subject_data["subject_id"]
-
-        data_description_json = ecephys_session_folder / "data_description.json"
-        session_name = "undefined"
-        if data_description_json.is_file():
-            data_description = json.load(open(data_description_json, "r"))
-            session_name = data_description["name"]
-
-        log.setup_logging(
-            "Job Dispatch Ecephys",
-            subject_id=subject_id,
-            asset_name=session_name,
-        )
-        aind_log_setup = True
+    if LOGGING is None:
+        logging.basicConfig(level="INFO", stream=sys.stdout, format="%(message)s")
     else:
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
+        if LOGGING["package"] == "logging":
+            logging_cfg = LOGGING.get("logging_cfg", {})
+            logging.basicConfig(stream=sys.stdout, **logging_cfg)
+        elif LOGGING["package"] == "log-schema":
+            import log_schema
 
-    logging.info(f"Running job dispatcher with the following parameters:")
+            pipeline_name = LOGGING.get("pipeline_name", "AIND Ephys Pipeline")
+            acquisition_name = LOGGING.get("acquisition_name", None)
+
+            if acquisition_name is None:
+                data_description_json = list(data_folder.glob("**/data_description.json"))
+                if len(data_description_json) > 0:
+                    data_description_json = data_description_json[0]
+                    with open(data_description_json, "r") as f:
+                        data_description = json.load(f)
+                    acquisition_name = data_description["name"]
+
+            config = LOGGING.get("logging_cfg")
+            if config is not None and len(config) == 0:
+                config = None
+            log_schema.setup_logging(
+                config=config,
+                model={
+                    "pipeline_name": pipeline_name,
+                    "acquisition_name": acquisition_name,
+                    "process_name": "Job Dispatch"
+                }
+            )
+
+    logging.info("Begin processing...", extra={"event_type": "stage_start"})
+    logging.info(f"Running job dispatch with the following parameters:")
     logging.info(f"\tSPLIT SEGMENTS: {SPLIT_SEGMENTS}")
     logging.info(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
     logging.info(f"\tDEBUG: {DEBUG}")
@@ -257,6 +248,15 @@ if __name__ == "__main__":
     recording_dict = {}
     include_annotations = False
     if INPUT == "aind":
+        ecephys_session_folders = [
+            p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
+        ]
+        if len(ecephys_session_folders) == 0:
+            raise Exception("No valid ecephys sessions found.")
+        elif len(ecephys_session_folders) > 1:
+            if not MULTI_SESSION:
+                raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
+
         for ecephys_session_folder in ecephys_session_folders:
             session_name = None
             if (ecephys_session_folder / "data_description.json").is_file():
@@ -830,3 +830,12 @@ if __name__ == "__main__":
         with open(results_folder / f"job_{i}.json", "w") as f:
             json.dump(job_dict, f, indent=4, cls=SIJsonEncoder)
     logging.info(f"Generated {len(job_dict_list)} job config files")
+    logging.info("Pipeline stage completed", extra={"event_type": "stage_complete"})
+
+
+if __name__ == "__main__":
+    try:
+        run()
+    except Exception as e:
+        logging.exception("Pipeline stage failed", extra={"event_type": "stage_error"})
+        raise
