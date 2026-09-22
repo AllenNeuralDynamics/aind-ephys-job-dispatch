@@ -131,7 +131,8 @@ spikeinterface_info_group.add_argument(
 
 parser.add_argument("--params", default=None, help="Path to the parameters file or JSON string. If given, it will override all other arguments.")
 
-if __name__ == "__main__":
+def run() -> None:
+    """Entrypoint for the job dispatch capsule."""
     args = parser.parse_args()
 
     # if params is given, override all other arguments
@@ -230,6 +231,7 @@ if __name__ == "__main__":
                 }
             )
 
+    logging.info("Begin processing...", extra={"event_type": "stage_start"})
     logging.info(f"Running job dispatch with the following parameters:")
     logging.info(f"\tSPLIT SEGMENTS: {SPLIT_SEGMENTS}")
     logging.info(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
@@ -849,3 +851,12 @@ if __name__ == "__main__":
         with open(results_folder / f"job_{i}.json", "w") as f:
             json.dump(job_dict, f, indent=4, cls=SIJsonEncoder)
     logging.info(f"Generated {len(job_dict_list)} job config files")
+    logging.info("Pipeline stage completed", extra={"event_type": "stage_complete"})
+
+
+if __name__ == "__main__":
+    try:
+        run()
+    except Exception as e:
+        logging.exception("Pipeline stage failed", extra={"event_type": "stage_error"})
+        raise
