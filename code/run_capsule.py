@@ -73,17 +73,17 @@ timestamps_skip_group.add_argument(
     "static_skip_timestamps_check", nargs="?", help=timestamps_skip_help
 )
 
+input_group = parser.add_mutually_exclusive_group()
+input_help = "Which 'loader' to use (spikeglx | openephys | nwb | spikeinterface | aind)"
+input_group.add_argument("--input", default=None, help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
+input_group.add_argument("static_input", nargs="?", help=input_help)
+
 min_recording_duration = parser.add_mutually_exclusive_group()
 min_recording_duration_help = (
     "If provided, skips recordings with duration less than this value. If -1 (default), no recordings are skipped"
 )
 min_recording_duration.add_argument("--min-recording-duration", default="-1", help=min_recording_duration_help)
 min_recording_duration.add_argument("static_min_recording_duration", nargs="?", default=None, help=min_recording_duration_help)
-
-input_group = parser.add_mutually_exclusive_group()
-input_help = "Which 'loader' to use (spikeglx | openephys | nwb | spikeinterface | aind)"
-input_group.add_argument("--input", default=None, help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
-input_group.add_argument("static_input", nargs="?", help=input_help)
 
 nwb_files_help = (
     "Explicitly specified paths (comma-separated) to NWB files to process. "
