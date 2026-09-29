@@ -428,6 +428,8 @@ if __name__ == "__main__":
                                 logging.info(f"\t\tNo LFP stream found for {stream_name}")
 
     elif INPUT == "nwb":
+        from spikeinterface.extractors.nwbextractors import NwbRecordingExtractor
+
         # get blocks/experiments and streams info
         all_input_folders = [p for p in data_folder.iterdir() if p.is_dir()]
         if NWB_FILES is not None:
@@ -452,7 +454,7 @@ if __name__ == "__main__":
             num_blocks = 1
             block_index = 0
 
-            electrical_series_paths = se.NwbRecordingExtractor.fetch_available_electrical_series_paths(nwb_file)
+            electrical_series_paths = NwbRecordingExtractor.fetch_available_electrical_series_paths(nwb_file)
 
             logging.info(f"\tSession name: {session_name}")
             logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electrical_series_paths)}")
