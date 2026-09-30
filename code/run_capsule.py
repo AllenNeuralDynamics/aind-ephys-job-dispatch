@@ -141,33 +141,35 @@ def run() -> None:
     if PARAMS is not None:
         # try to parse the JSON string first to avoid file name too long error
         try:
-            params = json.loads(PARAMS)
+            job_dispatch_params = json.loads(PARAMS)
         except json.JSONDecodeError:
             if Path(PARAMS).is_file():
                 with open(PARAMS, "r") as f:
-                    params = json.load(f)
+                    job_dispatch_params = json.load(f)
             else:
                 raise ValueError(f"Invalid parameters: {PARAMS} is not a valid JSON string or file path")
 
-        SPLIT_SEGMENTS = params.get("split_segments", False)
-        SPLIT_GROUPS = params.get("split_groups", True)
-        DEBUG = params.get("debug", False)
-        DEBUG_DURATION = params.get("debug_duration")
+        SPLIT_SEGMENTS = job_dispatch_params.get("split_segments", False)
+        SPLIT_GROUPS = job_dispatch_params.get("split_groups", True)
+        DEBUG = job_dispatch_params.get("debug", False)
+        DEBUG_DURATION = job_dispatch_params.get("debug_duration")
         if DEBUG_DURATION is not None:
             DEBUG_DURATION = float(DEBUG_DURATION)
-        SKIP_TIMESTAMPS_CHECK = params.get("skip_timestamps_check", False)
-        MULTI_SESSION = params.get("multi_session", False)
-        INPUT = params.get("input")
-        NWB_FILES = params.get("nwb_files", None)
+        SKIP_TIMESTAMPS_CHECK = job_dispatch_params.get("skip_timestamps_check", False)
+        MULTI_SESSION = job_dispatch_params.get("multi_session", False)
+        INPUT = job_dispatch_params.get("input")
+        NWB_FILES = job_dispatch_params.get("nwb_files", None)
         assert INPUT is not None, "Input type is required"
         if INPUT == "spikeinterface":
-            spikeinterface_info = params.get("spikeinterface_info")
+            spikeinterface_info = job_dispatch_params.get("spikeinterface_info")
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
-        MULTI_SESSION = params.get("multi_session", False)
-        MIN_RECORDING_DURATION = params.get("min_recording_duration", -1)
-        LOGGING = params.get("logging", None)
+        MULTI_SESSION = job_dispatch_params.get("multi_session", False)
+        MIN_RECORDING_DURATION = job_dispatch_params.get("min_recording_duration", -1)
+        LOGGING = job_dispatch_params.get("logging", None)
     else:
         # if params is not given, use the arguments
+        with open("params.json", "r") as f:
+            job_dispatch_params = json.load(f)
         SPLIT_SEGMENTS = (
             args.static_split_segments.lower() == "true" if args.static_split_segments
             else not args.no_split_segments
@@ -198,9 +200,8 @@ def run() -> None:
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
         MIN_RECORDING_DURATION = float(args.static_min_recording_duration or args.min_recording_duration)
 
-        with open("params.json", "r") as f:
-            params = json.load(f)
-        LOGGING = params.get("logging", None)
+    # TODO: temporary - remove from params.json when logging is distributed by pipeline
+    LOGGING = job_dispatch_params.get("logging", None)
 
     # setup AIND logging before any other logging call
     if LOGGING is None:
