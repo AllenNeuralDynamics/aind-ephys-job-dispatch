@@ -198,6 +198,10 @@ def run() -> None:
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
         MIN_RECORDING_DURATION = float(args.static_min_recording_duration or args.min_recording_duration)
 
+        with open("params.json", "r") as f:
+            params = json.load(f)
+        LOGGING = params.get("logging", None)
+
     # setup AIND logging before any other logging call
     if LOGGING is None:
         logging.basicConfig(level="INFO", stream=sys.stdout, format="%(message)s")
