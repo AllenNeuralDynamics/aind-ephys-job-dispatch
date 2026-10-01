@@ -21,22 +21,13 @@ from spikeinterface.core.core_tools import SIJsonEncoder
 
 import probeinterface as pi
 
-try:
-    from aind_log_utils import log
-
-    HAVE_AIND_LOG_UTILS = True
-except ImportError:
-    HAVE_AIND_LOG_UTILS = False
-
 
 # here we define some constants used for defining if timestamps are ok
 # or should be skipped
 ACCEPTED_NEGATIVE_DEVIATION_MS = 0.2  # we allow for small negative timestamps diff glitches
 MAX_NUM_NEGATIVE_TIMESTAMPS = 10  # maximum number of negative timestamps allowed below the accepted deviation
 ABS_MAX_TIMESTAMPS_DEVIATION_MS = 2  # absolute maximum deviation allowed for timestamps (also positive)
-
-MAX_NUM_NEGATIVE_TIMESTAMPS = 10
-MAX_TIMESTAMPS_DEVIATION_MS = 1
+MAX_PERCENT_ZERO_TIMESTAMPS_DIFF = 0.02  # percent of zero timestamps diff allowes
 
 
 data_folder = Path("../data")
@@ -80,6 +71,13 @@ input_help = "Which 'loader' to use (spikeglx | openephys | nwb | spikeinterface
 input_group.add_argument("--input", default=None, help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
 input_group.add_argument("static_input", nargs="?", help=input_help)
 
+min_recording_duration = parser.add_mutually_exclusive_group()
+min_recording_duration_help = (
+    "If provided, skips recordings with duration less than this value. If -1 (default), no recordings are skipped"
+)
+min_recording_duration.add_argument("--min-recording-duration", default="-1", help=min_recording_duration_help)
+min_recording_duration.add_argument("static_min_recording_duration", nargs="?", default=None, help=min_recording_duration_help)
+
 nwb_files_help = (
     "Explicitly specified paths (comma-separated) to NWB files to process. "
     "Only used if `input='nwb'`. "
@@ -103,13 +101,6 @@ multi_session_group = parser.add_mutually_exclusive_group()
 multi_session_help = "Whether the data folder includes multiple sessions or not. Default: False"
 multi_session_group.add_argument("--multi-session", action="store_true", help=multi_session_help)
 multi_session_group.add_argument("static_multi_session", nargs="?", help=multi_session_help)
-
-min_recording_duration = parser.add_mutually_exclusive_group()
-min_recording_duration_help = (
-    "If provided, skips recordings with duration less than this value. If -1 (default), no recordings are skipped"
-)
-min_recording_duration.add_argument("--min-recording-duration", default="-1", help=min_recording_duration_help)
-min_recording_duration.add_argument("static_min_recording_duration", nargs="?", default=None, help=min_recording_duration_help)
 
 spikeinterface_info_group = parser.add_mutually_exclusive_group()
 spikeinterface_info_help = """
@@ -140,40 +131,45 @@ spikeinterface_info_group.add_argument(
 
 parser.add_argument("--params", default=None, help="Path to the parameters file or JSON string. If given, it will override all other arguments.")
 
-if __name__ == "__main__":
+def run() -> None:
+    """Entrypoint for the job dispatch capsule."""
     args = parser.parse_args()
 
     # if params is given, override all other arguments
     PARAMS = args.params
+    LOGGING = None
     if PARAMS is not None:
         # try to parse the JSON string first to avoid file name too long error
         try:
-            params = json.loads(PARAMS)
+            job_dispatch_params = json.loads(PARAMS)
         except json.JSONDecodeError:
             if Path(PARAMS).is_file():
                 with open(PARAMS, "r") as f:
-                    params = json.load(f)
+                    job_dispatch_params = json.load(f)
             else:
                 raise ValueError(f"Invalid parameters: {PARAMS} is not a valid JSON string or file path")
 
-        SPLIT_SEGMENTS = params.get("split_segments", False)
-        SPLIT_GROUPS = params.get("split_groups", True)
-        DEBUG = params.get("debug", False)
-        DEBUG_DURATION = params.get("debug_duration")
+        SPLIT_SEGMENTS = job_dispatch_params.get("split_segments", False)
+        SPLIT_GROUPS = job_dispatch_params.get("split_groups", True)
+        DEBUG = job_dispatch_params.get("debug", False)
+        DEBUG_DURATION = job_dispatch_params.get("debug_duration")
         if DEBUG_DURATION is not None:
             DEBUG_DURATION = float(DEBUG_DURATION)
-        SKIP_TIMESTAMPS_CHECK = params.get("skip_timestamps_check", False)
-        MULTI_SESSION = params.get("multi_session", False)
-        INPUT = params.get("input")
-        NWB_FILES = params.get("nwb_files", None)
+        SKIP_TIMESTAMPS_CHECK = job_dispatch_params.get("skip_timestamps_check", False)
+        MULTI_SESSION = job_dispatch_params.get("multi_session", False)
+        INPUT = job_dispatch_params.get("input")
+        NWB_FILES = job_dispatch_params.get("nwb_files", None)
         assert INPUT is not None, "Input type is required"
         if INPUT == "spikeinterface":
-            spikeinterface_info = params.get("spikeinterface_info")
+            spikeinterface_info = job_dispatch_params.get("spikeinterface_info")
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
-        MULTI_SESSION = params.get("multi_session", False)
-        MIN_RECORDING_DURATION = params.get("min_recording_duration", -1)
+        MULTI_SESSION = job_dispatch_params.get("multi_session", False)
+        MIN_RECORDING_DURATION = job_dispatch_params.get("min_recording_duration", -1)
+        LOGGING = job_dispatch_params.get("logging", None)
     else:
         # if params is not given, use the arguments
+        with open("params.json", "r") as f:
+            job_dispatch_params = json.load(f)
         SPLIT_SEGMENTS = (
             args.static_split_segments.lower() == "true" if args.static_split_segments
             else not args.no_split_segments
@@ -204,46 +200,44 @@ if __name__ == "__main__":
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
         MIN_RECORDING_DURATION = float(args.static_min_recording_duration or args.min_recording_duration)
 
+    # TODO: temporary - remove from params.json when logging is distributed by pipeline
+    LOGGING = job_dispatch_params.get("logging", None)
+
     # setup AIND logging before any other logging call
-    aind_log_setup = False
-
-    ecephys_session_folders = None
-    if INPUT == "aind":
-        ecephys_session_folders = [
-            p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
-        ]
-        if len(ecephys_session_folders) == 0:
-            raise Exception("No valid ecephys sessions found.")
-        elif len(ecephys_session_folders) > 1:
-            if not MULTI_SESSION:
-                raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
-
-
-    if HAVE_AIND_LOG_UTILS and ecephys_session_folders is not None:
-        # look for subject.json and data_description.json files
-        ecephys_session_folder = ecephys_session_folders[0]
-        subject_json = ecephys_session_folder / "subject.json"
-        subject_id = "undefined"
-        if subject_json.is_file():
-            subject_data = json.load(open(subject_json, "r"))
-            subject_id = subject_data["subject_id"]
-
-        data_description_json = ecephys_session_folder / "data_description.json"
-        session_name = "undefined"
-        if data_description_json.is_file():
-            data_description = json.load(open(data_description_json, "r"))
-            session_name = data_description["name"]
-
-        log.setup_logging(
-            "Job Dispatch Ecephys",
-            subject_id=subject_id,
-            asset_name=session_name,
-        )
-        aind_log_setup = True
+    if LOGGING is None:
+        logging.basicConfig(level="INFO", stream=sys.stdout, format="%(message)s")
     else:
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
+        if LOGGING["package"] == "logging":
+            logging_cfg = LOGGING.get("logging_cfg", {})
+            logging.basicConfig(stream=sys.stdout, **logging_cfg)
+        elif LOGGING["package"] == "log-schema":
+            import log_schema
 
-    logging.info(f"Running job dispatcher with the following parameters:")
+            pipeline_name = LOGGING.get("pipeline_name", "AIND Ephys Pipeline")
+            acquisition_name = LOGGING.get("acquisition_name", None)
+
+            if acquisition_name is None:
+                data_description_json = list(data_folder.glob("**/data_description.json"))
+                if len(data_description_json) > 0:
+                    data_description_json = data_description_json[0]
+                    with open(data_description_json, "r") as f:
+                        data_description = json.load(f)
+                    acquisition_name = data_description["name"]
+
+            config = LOGGING.get("logging_cfg")
+            if config is not None and len(config) == 0:
+                config = None
+            log_schema.setup_logging(
+                config=config,
+                model={
+                    "pipeline_name": pipeline_name,
+                    "acquisition_name": acquisition_name,
+                    "process_name": "Job Dispatch"
+                }
+            )
+
+    logging.info("Begin processing...", extra={"event_type": "stage_start"})
+    logging.info(f"Running job dispatch with the following parameters:")
     logging.info(f"\tSPLIT SEGMENTS: {SPLIT_SEGMENTS}")
     logging.info(f"\tSPLIT GROUPS: {SPLIT_GROUPS}")
     logging.info(f"\tDEBUG: {DEBUG}")
@@ -259,6 +253,15 @@ if __name__ == "__main__":
     recording_dict = {}
     include_annotations = False
     if INPUT == "aind":
+        ecephys_session_folders = [
+            p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
+        ]
+        if len(ecephys_session_folders) == 0:
+            raise Exception("No valid ecephys sessions found.")
+        elif len(ecephys_session_folders) > 1:
+            if not MULTI_SESSION:
+                raise Exception("Multiple ecephys sessions found in the data folder. Please only add one at a time")
+
         for ecephys_session_folder in ecephys_session_folders:
             session_name = None
             if (ecephys_session_folder / "data_description.json").is_file():
@@ -275,91 +278,75 @@ if __name__ == "__main__":
                 new_format = False
                 ecephys_folder = ecephys_session_folder
 
-            compressed = False
-            if (ecephys_folder / "ecephys_compressed").is_dir():
-                # most recent folder organization
-                compressed = True
-                ecephys_compressed_folder = ecephys_folder / "ecephys_compressed"
-                ecephys_openephys_folder = ecephys_folder / "ecephys_clipped"
-            else:
-                # uncompressed data
-                ecephys_openephys_folder = ecephys_base_folder
+            if not (ecephys_folder / "ecephys_compressed").is_dir():
+                raise FileNotFoundError(f"Compressed folder not found in {ecephys_folder}")
+            ecephys_compressed_folder = ecephys_folder / "ecephys_compressed"
+            ecephys_openephys_folder = ecephys_folder / "ecephys_clipped"
 
             logging.info(f"\tSession name: {session_name}")
             logging.info(f"\tOpen Ephys folder: {str(ecephys_openephys_folder)}")
-            if compressed:
-                logging.info(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
+            logging.info(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
 
-            # get blocks/experiments and streams info
-            num_blocks = se.get_neo_num_blocks("openephysbinary", ecephys_openephys_folder)
-            stream_names, stream_ids = se.get_neo_streams("openephysbinary", ecephys_openephys_folder)
+            zarr_paths = [p for p in ecephys_compressed_folder.iterdir() if p.is_dir() and p.name.endswith(".zarr")]
 
-            # load first stream to map block_indices to experiment_names
-            rec_test = se.read_openephys(ecephys_openephys_folder, block_index=0, stream_name=stream_names[0])
-            record_node = list(rec_test.neo_reader.folder_structure.keys())[0]
-            experiments = rec_test.neo_reader.folder_structure[record_node]["experiments"]
-            exp_ids = list(experiments.keys())
-            experiment_names = [experiments[exp_id]["name"] for exp_id in sorted(exp_ids)]
+            logging.info(f"\tNum. zarr folders {len(zarr_paths)}")
+            for zarr_path in zarr_paths:
+                full_stream_name = zarr_path.name.replace(".zarr", "")
+                # stream_name is organized as:
+                # {experiment_name}_{openephys_stream_name}.zarr
+                experiment_name = full_stream_name.split("_")[0]
+                experiment_number = int(experiment_name.replace("experiment", ""))
+                openephys_stream_name = "_".join(full_stream_name.split("_")[1:])
+                is_ap_stream = (
+                    "NI-DAQ" not in openephys_stream_name and
+                    "LFP" not in openephys_stream_name and 
+                    "Rhythm" not in openephys_stream_name
+                )
+                if is_ap_stream:
+                    recording_name = f"{full_stream_name}_recording"
+                    recording = si.read_zarr(zarr_path)
 
-            logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(stream_names)}")
-            for block_index in range(num_blocks):
-                for stream_name in stream_names:
-                    # skip NIDAQ and NP1-LFP streams
-                    if "NI-DAQ" not in stream_name and "LFP" not in stream_name and "Rhythm" not in stream_name:
-                        experiment_name = experiment_names[block_index]
-                        exp_stream_name = f"{experiment_name}_{stream_name}"
-                        if not compressed:
-                            recording = se.read_openephys(
-                                ecephys_openephys_folder, stream_name=stream_name, block_index=block_index
+                    # Fix probe information in case of missing names
+                    updated_probe = None
+                    probes_info = recording.get_annotation("probes_info")
+                    if probes_info is not None and len(probes_info) == 1:
+                        probe_info = probes_info[0]
+                        probe_name = probe_info["name"]
+                        if probe_name == "":
+                            experiment_folder = list(ecephys_openephys_folder.glob(f"**/{experiment_name}/"))[0]
+                            record_node_folder = experiment_folder.parent
+                            
+                            logging.info(
+                                f"\t\tProbe name is missing for {experiment_name} - {openephys_stream_name}! "
+                                "Parsing Open Ephys settings to load up-to-date probe info"
                             )
-                        else:
-                            recording = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name}.zarr")
-                        recording_name = f"{exp_stream_name}_recording"
+                            if experiment_number == 1:
+                                settings_name = "settings.xml"
+                            else:
+                                settings_name = f"settings_{experiment_number}.xml"
+                            updated_probe = pi.read_openephys(
+                                record_node_folder / settings_name,
+                                stream_name=openephys_stream_name
+                            )
+                            # TODO: remove in v0.105.0 since probe is dumped in dict by default
+                            recording.set_probe(updated_probe, in_place=True)
+                            # make sure we the updated annotations when dumping the dict!
+                            include_annotations = True
 
-                        # fix probe information in case of missing names
-                        updated_probe = None
-                        probes_info = recording.get_annotation("probes_info")
-                        if probes_info is not None and len(probes_info) == 1:
-                            probe_info = probes_info[0]
-                            probe_name = probe_info["name"]
-                            if probe_name == "":
-                                record_node, oe_stream_name = stream_name.split("#")
-                                logging.info(
-                                    f"\t\tProbe name is missing for block {block_index} - {oe_stream_name}! "
-                                    "Parsing Open Ephys settings to load up-to-date probe info"
-                                )
-                                if block_index == 0:
-                                    settings_name = "settings.xml"
-                                else:
-                                    settings_name = f"settings_{block_index + 1}.xml"
-                                updated_probe = pi.read_openephys(
-                                    ecephys_openephys_folder / record_node / settings_name,
-                                    stream_name=oe_stream_name
-                                )
-                                recording.set_probe(updated_probe, in_place=True)
-                                # make sure we the updated annotations when dumping the dict!
-                                include_annotations = True
+                    recording_dict[(session_name, recording_name)] = {}
+                    recording_dict[(session_name, recording_name)]["input_folder"] = ecephys_session_folder
+                    recording_dict[(session_name, recording_name)]["raw"] = recording
 
-                        recording_dict[(session_name, recording_name)] = {}
-                        recording_dict[(session_name, recording_name)]["input_folder"] = ecephys_session_folder
-                        recording_dict[(session_name, recording_name)]["raw"] = recording
-
-                        # load the associated LF stream (if available)
-                        if "AP" in stream_name:
-                            stream_name_lf = stream_name.replace("AP", "LFP")
-                            exp_stream_name_lf = exp_stream_name.replace("AP", "LFP")
-                            try:
-                                if not compressed:
-                                    recording_lf = se.read_openephys(
-                                        ecephys_openephys_folder, stream_name=stream_name_lf, block_index=block_index
-                                    )
-                                else:
-                                    recording_lf = si.read_zarr(ecephys_compressed_folder / f"{exp_stream_name_lf}.zarr")
-                                if updated_probe is not None:
-                                    recording_lf.set_probe(updated_probe, in_place=True)
-                                recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
-                            except:
-                                logging.info(f"\t\tNo LFP stream found for {exp_stream_name}")
+                    # load the associated LF stream (if available)
+                    if "AP" in openephys_stream_name:
+                        lf_stream_name = full_stream_name.replace("AP", "LFP")
+                        try:
+                            recording_lf = si.read_zarr(ecephys_compressed_folder / f"{lf_stream_name}.zarr")
+                            if updated_probe is not None:
+                                recording_lf.set_probe(updated_probe, in_place=True)
+                            recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                        except:
+                            logging.info(f"\t\tNo LFP stream found for {openephys_stream_name}")
 
     elif INPUT == "spikeglx":
         # get blocks/experiments and streams info
@@ -494,6 +481,58 @@ if __name__ == "__main__":
                     recording_name = f"block{block_index}_{stream_name}_recording"
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["raw"] = recording
+                    # Since NWB files currently only load locations, we also need to load the probe information from
+                    # the NWB file to get the probe name and other metadata. This is fixed in 0.105 since the probe is
+                    # dumped to the dict.
+                    from pynwb import NWBHDF5IO
+
+                    group_names = np.unique(recording.get_channel_groups())
+                    try:
+                        with NWBHDF5IO(str(nwb_file), "r", load_namespaces=True) as io:
+                            nwbfile = io.read()
+                            devices = {nwbfile.electrode_groups[group_name].device for group_name in group_names}
+                            assert len(devices) == 1, (
+                                f"Found multiple devices associated to {electrical_series_path}: "
+                                f"{sorted(d.name for d in devices)}. Expected a single probe/device."
+                            )
+                            device = devices.pop()
+                            device_name = device.name
+                            device_manufacturer = device.manufacturer
+                            device_description = device.description
+                            locations_by_group = {
+                                group_name: nwbfile.electrode_groups[group_name].location
+                                for group_name in group_names
+                            }
+
+                        unique_locations = set(locations_by_group.values())
+                        electrode_group_location = unique_locations.pop() if len(unique_locations) == 1 else None
+
+                        locations = recording.get_channel_locations()
+                        probe = pi.Probe(
+                            ndim=2,
+                            si_units="um",
+                            name=device_name,
+                            manufacturer=device_manufacturer,
+                        )
+                        probe.set_contacts(
+                            positions=locations,
+                            shapes="circle",
+                            shape_params={"radius": 5},
+                            contact_ids=recording.get_channel_ids(),
+                        )
+                        probe.set_device_channel_indices(np.arange(recording.get_num_channels()))
+                        if len(group_names) > 1:
+                            probe.set_shank_ids(recording.get_channel_groups())
+                        if device_description is not None:
+                            probe.annotate(description=device_description)
+                        if electrode_group_location is not None:
+                            probe.annotate(electrode_group_location=electrode_group_location)
+                        recording_dict[(session_name, recording_name)]["probe"] = probe
+                    except Exception as e:
+                        logging.info(
+                            f"\t\tCould not retrieve probe/device information from ElectrodeGroups for "
+                            f"{electrical_series_path}: {e}"
+                        )
 
     elif INPUT == "spikeinterface":
         from spikeinterface.extractors import recording_extractor_full_dict
@@ -639,6 +678,7 @@ if __name__ == "__main__":
         input_folder = recording_dict[session_recording_name].get("input_folder")
         recording = recording_dict[session_recording_name]["raw"]
         recording_lfp = recording_dict[session_recording_name].get("lfp", None)
+        probe = recording_dict[session_recording_name].get("probe", None)
 
         if MIN_RECORDING_DURATION != -1:
             duration = recording.get_total_duration()
@@ -649,6 +689,7 @@ if __name__ == "__main__":
                 continue
 
         HAS_LFP = recording_lfp is not None
+        HAS_EXTRA_PROBE = probe is not None
         if not SPLIT_SEGMENTS:
             recordings = [recording]
             recordings_lfp = [recording_lfp] if HAS_LFP else None
@@ -667,24 +708,30 @@ if __name__ == "__main__":
 
             # timestamps should be monotonically increasing, but we allow for small glitches
             skip_times = False
+            skip_times_msg = ""
             if not SKIP_TIMESTAMPS_CHECK:
                 for segment_index in range(recording.get_num_segments()):
                     times = recording.get_times(segment_index=segment_index)
                     times_diff_ms = np.diff(times) * 1000
                     num_negative_times = np.sum(times_diff_ms < -ACCEPTED_NEGATIVE_DEVIATION_MS)
 
+                    # Check for negative timestamps
                     if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
-                        logging.info(
-                            f"\t{recording_name}:\n\t\tSkipping timestamps for too many negative "
-                            f"timestamps diffs below {ACCEPTED_NEGATIVE_DEVIATION_MS}: {num_negative_times}"
+                        skip_times_msg = (
+                            f"too many negative timestamps diffs below {ACCEPTED_NEGATIVE_DEVIATION_MS}: {num_negative_times}"
                         )
                         skip_times = True
                         break
+                    # Check for max timestamp gaps
                     max_time_diff_ms = np.max(np.abs(times_diff_ms))
                     if max_time_diff_ms > ABS_MAX_TIMESTAMPS_DEVIATION_MS:
-                        logging.info(
-                            f"\t{recording_name}:\n\t\tSkipping timestamps for too large time diff deviation: {max_time_diff_ms} ms"
-                        )
+                        skip_times_msg = f"too large time diff deviation: {max_time_diff_ms} ms"
+                        skip_times = True
+                        break
+                    # Check for 0 timestamps diff
+                    num_zero_diffs = np.sum(times_diff_ms == 0)
+                    if num_zero_diffs >= MAX_PERCENT_ZERO_TIMESTAMPS_DIFF * len(times_diff_ms):
+                        skip_times_msg = f"too many zero diffs: {num_zero_diffs}/{len(times_diff_ms)}"
                         skip_times = True
                         break
 
@@ -721,43 +768,56 @@ if __name__ == "__main__":
 
             duration = np.round(recording.get_total_duration(), 2)
 
-            # if multiple channel groups, process in parallel
+            # If multiple channel groups, process in parallel
+            # a group name of None means the recording is not split
             if SPLIT_GROUPS and len(np.unique(recording.get_channel_groups())) > 1:
-                for group_name, recording_group in recording.split_by("group").items():
-                    recording_name_group = f"{recording_name_segment}_group{group_name}"
-                    job_dict = dict(
-                        session_name=session_name,
-                        recording_name=str(recording_name_group),
-                        recording_dict=recording_group.to_dict(recursive=True, relative_to=data_folder),
-                        skip_times=skip_times,
-                        duration=duration,
-                        input_folder=input_folder,
-                        debug=DEBUG,
-                    )
-                    rec_str = f"\t{recording_name_group}\n\t\tDuration {duration} s - Num. channels: {recording_group.get_num_channels()}"
-                    if HAS_LFP:
-                        recording_lfp_group = recording_lfp.split_by("group")[group_name]
-                        job_dict["recording_lfp_dict"] = recording_lfp_group.to_dict(
-                            recursive=True, relative_to=data_folder
+                groups = recording.split_by("group")
+                groups_lfp = {}
+                if HAS_LFP:
+                    groups_lfp = recording_lfp.split_by("group")
+                    # AP and LFP are the same physical channels, so their groups should match.
+                    # If they don't, we drop the LFP stream for the groups that are missing.
+                    missing_lfp_groups = set(groups) - set(groups_lfp)
+                    if missing_lfp_groups:
+                        logging.warning(
+                            f"\t{recording_name_segment}: AP and LFP channel groups differ - "
+                            f"skipping LFP stream for group(s) {sorted(missing_lfp_groups)}"
                         )
-                        rec_str += f" (with LFP stream)"
-                    logging.info(rec_str)
-                    job_dict_list.append(job_dict)
             else:
+                groups = {None: recording}
+                groups_lfp = {None: recording_lfp} if HAS_LFP else {}
+
+            for group_name, recording_group in groups.items():
+                if group_name is not None:
+                    recording_name_group = f"{recording_name_segment}_group{group_name}"
+                else:
+                    recording_name_group = recording_name_segment
                 job_dict = dict(
                     session_name=session_name,
-                    recording_name=str(recording_name_segment),
-                    recording_dict=recording.to_dict(recursive=True, include_annotations=include_annotations, relative_to=data_folder),
+                    recording_name=str(recording_name_group),
+                    recording_dict=recording_group.to_dict(
+                        recursive=True, include_annotations=include_annotations, relative_to=data_folder
+                    ),
                     skip_times=skip_times,
                     duration=duration,
                     input_folder=input_folder,
                     debug=DEBUG,
                 )
-                rec_str = f"\t{recording_name_segment}\n\t\tDuration: {duration} s - Num. channels: {recording.get_num_channels()}"
-                if HAS_LFP:
-                    job_dict["recording_lfp_dict"] = recording_lfp.to_dict(recursive=True, relative_to=data_folder)
+                rec_str = (
+                    f"\t{recording_name_group}\n\t\tDuration: {duration} s - "
+                    f"Num. channels: {recording_group.get_num_channels()}"
+                )
+                if group_name in groups_lfp:
+                    job_dict["recording_lfp_dict"] = groups_lfp[group_name].to_dict(
+                        recursive=True, relative_to=data_folder
+                    )
                     rec_str += f" (with LFP stream)"
+                if HAS_EXTRA_PROBE:
+                    # Here we save the whole probe, since we only need it post-aggregation
+                    job_dict["probe_dict"] = probe.to_dict()
                 logging.info(rec_str)
+                if skip_times:
+                    logging.info(f"\t\tResetting timestamps: {skip_times_msg}")
                 job_dict_list.append(job_dict)
 
     if not results_folder.is_dir():
@@ -775,3 +835,12 @@ if __name__ == "__main__":
         with open(results_folder / f"job_{i}.json", "w") as f:
             json.dump(job_dict, f, indent=4, cls=SIJsonEncoder)
     logging.info(f"Generated {len(job_dict_list)} job config files")
+    logging.info("Pipeline stage completed", extra={"event_type": "stage_complete"})
+
+
+if __name__ == "__main__":
+    try:
+        run()
+    except Exception as e:
+        logging.exception("Pipeline stage failed", extra={"event_type": "stage_error"})
+        raise
