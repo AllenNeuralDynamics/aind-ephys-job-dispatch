@@ -287,7 +287,7 @@ def run() -> None:
             logging.info(f"\tOpen Ephys folder: {str(ecephys_openephys_folder)}")
             logging.info(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
 
-            zarr_paths = [p for p in ecephys_compressed_folder.iterdir() if p.is_dir() and p.name.endswith(".zarr")]
+            zarr_paths = sorted([p for p in ecephys_compressed_folder.iterdir() if p.is_dir() and p.name.endswith(".zarr")])
 
             logging.info(f"\tNum. zarr folders {len(zarr_paths)}")
             for zarr_path in zarr_paths:
@@ -433,6 +433,8 @@ def run() -> None:
                                 logging.info(f"\t\tNo LFP stream found for {stream_name}")
 
     elif INPUT == "nwb":
+        from spikeinterface.extractors.nwbextractors import NwbRecordingExtractor
+
         # get blocks/experiments and streams info
         all_input_folders = [p for p in data_folder.iterdir() if p.is_dir()]
         if NWB_FILES is not None:
@@ -457,7 +459,7 @@ def run() -> None:
             num_blocks = 1
             block_index = 0
 
-            electrical_series_paths = se.NwbRecordingExtractor.fetch_available_electrical_series_paths(nwb_file)
+            electrical_series_paths = NwbRecordingExtractor.fetch_available_electrical_series_paths(nwb_file)
 
             logging.info(f"\tSession name: {session_name}")
             logging.info(f"\tNum. Blocks {num_blocks} - Num. streams: {len(electrical_series_paths)}")
@@ -527,7 +529,7 @@ def run() -> None:
                             probe.annotate(description=device_description)
                         if electrode_group_location is not None:
                             probe.annotate(electrode_group_location=electrode_group_location)
-                        recording_dict[(session_name, recording_name)]["probe"] = probe
+                        recording.set_probe(probe)
                     except Exception as e:
                         logging.info(
                             f"\t\tCould not retrieve probe/device information from ElectrodeGroups for "
@@ -678,7 +680,6 @@ def run() -> None:
         input_folder = recording_dict[session_recording_name].get("input_folder")
         recording = recording_dict[session_recording_name]["raw"]
         recording_lfp = recording_dict[session_recording_name].get("lfp", None)
-        probe = recording_dict[session_recording_name].get("probe", None)
 
         if MIN_RECORDING_DURATION != -1:
             duration = recording.get_total_duration()
@@ -689,7 +690,6 @@ def run() -> None:
                 continue
 
         HAS_LFP = recording_lfp is not None
-        HAS_EXTRA_PROBE = probe is not None
         if not SPLIT_SEGMENTS:
             recordings = [recording]
             recordings_lfp = [recording_lfp] if HAS_LFP else None
@@ -812,9 +812,6 @@ def run() -> None:
                         recursive=True, relative_to=data_folder
                     )
                     rec_str += f" (with LFP stream)"
-                if HAS_EXTRA_PROBE:
-                    # Here we save the whole probe, since we only need it post-aggregation
-                    job_dict["probe_dict"] = probe.to_dict()
                 logging.info(rec_str)
                 if skip_times:
                     logging.info(f"\t\tResetting timestamps: {skip_times_msg}")

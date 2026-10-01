@@ -1,4 +1,4 @@
-# hash:sha256:dad681911c89d8b2ba1788388485da09c27b69194506a4a985480d3ea9b2f36b
+# hash:sha256:de96277e12fd95f2cd49fc343efd9d1c870484a59a16aaa736029130870937d2
 ARG REGISTRY_HOST
 FROM $REGISTRY_HOST/codeocean/mambaforge3:24.5.0-0-python3.12.4-ubuntu22.04
 
@@ -15,5 +15,5 @@ RUN pip install -U --no-cache-dir \
     hdmf-zarr==0.13.0 \
     log-schema==0.2.10.dev1 \
     pynwb==3.1.3 \
-    spikeinterface==0.104.7 \
+    spikeinterface==0.105.0 \
     wavpack-numcodecs==0.2.2
