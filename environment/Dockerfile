@@ -17,3 +17,7 @@ RUN pip install -U --no-cache-dir \
     pynwb==3.1.3 \
     spikeinterface==0.104.7 \
     wavpack-numcodecs==0.2.2
+
+COPY postInstall /
+RUN --mount=type=secret,id=secrets . /run/secrets/secrets \
+    && /postInstall
