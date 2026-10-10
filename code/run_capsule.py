@@ -13,6 +13,7 @@ import json
 import logging
 import re
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 
 # SPIKEINTERFACE
@@ -31,6 +32,9 @@ ACCEPTED_NEGATIVE_DEVIATION_MS = 0.2  # we allow for small negative timestamps d
 MAX_NUM_NEGATIVE_TIMESTAMPS = 10  # maximum number of negative timestamps allowed below the accepted deviation
 ABS_MAX_TIMESTAMPS_DEVIATION_MS = 2  # absolute maximum deviation allowed for timestamps (also positive)
 MAX_PERCENT_ZERO_TIMESTAMPS_DIFF = 0.02  # percent of zero timestamps diff allowes
+# opening zarrs and reading timestamps is I/O-bound, so streams are read concurrently
+MAX_READ_THREADS = 8
+TIMESTAMPS_CHUNK_SIZE = 10_000_000
 
 
 data_folder = Path("../data")
@@ -151,6 +155,40 @@ def read_openephys_probe(settings_file: Path | UPath, stream_name: str) -> pi.Pr
         local_settings_file = Path(tmp) / settings_file.name
         local_settings_file.write_bytes(settings_file.read_bytes())
         return pi.read_openephys(local_settings_file, stream_name=stream_name)
+
+
+def try_read_zarr(zarr_path: Path | UPath) -> si.BaseRecording | Exception:
+    """Read a zarr recording, returning the exception instead of raising so a pool can read many at once."""
+    try:
+        return si.read_zarr(str(zarr_path))
+    except Exception as e:
+        return e
+
+
+def check_timestamps(rec_segment) -> str:
+    """Return why a segment's timestamps are unusable, or "" if they pass.
+
+    Reads the time vector in chunks instead of with `get_times()`, which loads the whole vector (8 bytes per sample)
+    and keeps it cached on the segment.
+    """
+    times = rec_segment.time_vector if rec_segment.time_vector is not None else rec_segment.get_times()
+    num_diffs = len(times) - 1
+    num_negative_times = 0
+    max_time_diff_ms = 0.0
+    num_zero_diffs = 0
+    for start in range(0, num_diffs, TIMESTAMPS_CHUNK_SIZE):
+        # one sample of overlap so the diff spans chunk boundaries
+        times_diff_ms = np.diff(np.asarray(times[start : start + TIMESTAMPS_CHUNK_SIZE + 1])) * 1000
+        num_negative_times += int(np.sum(times_diff_ms < -ACCEPTED_NEGATIVE_DEVIATION_MS))
+        max_time_diff_ms = max(max_time_diff_ms, float(np.max(np.abs(times_diff_ms))))
+        num_zero_diffs += int(np.sum(times_diff_ms == 0))
+    if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
+        return f"too many negative timestamps diffs below {ACCEPTED_NEGATIVE_DEVIATION_MS}: {num_negative_times}"
+    if max_time_diff_ms > ABS_MAX_TIMESTAMPS_DEVIATION_MS:
+        return f"too large time diff deviation: {max_time_diff_ms} ms"
+    if num_zero_diffs >= MAX_PERCENT_ZERO_TIMESTAMPS_DIFF * num_diffs:
+        return f"too many zero diffs: {num_zero_diffs}/{num_diffs}"
+    return ""
 
 
 def open_remote_session(url: str) -> UPath:
@@ -359,6 +397,16 @@ def run() -> None:
             zarr_paths = sorted([p for p in ecephys_compressed_folder.iterdir() if p.is_dir() and p.name.endswith(".zarr")])
 
             logging.info(f"\tNum. zarr folders {len(zarr_paths)}")
+            paths_to_read = []
+            for zarr_path in zarr_paths:
+                stream_name = zarr_path.name.replace(".zarr", "")
+                if not any(s in stream_name for s in ("NI-DAQ", "LFP", "Rhythm")):
+                    paths_to_read.append(zarr_path)
+                    if "AP" in stream_name:
+                        paths_to_read.append(ecephys_compressed_folder / f"{stream_name.replace('AP', 'LFP')}.zarr")
+            with ThreadPoolExecutor(MAX_READ_THREADS) as pool:
+                zarr_recordings = dict(zip(map(str, paths_to_read), pool.map(try_read_zarr, paths_to_read)))
+
             for zarr_path in zarr_paths:
                 full_stream_name = zarr_path.name.replace(".zarr", "")
                 # stream_name is organized as:
@@ -373,7 +421,9 @@ def run() -> None:
                 )
                 if is_ap_stream:
                     recording_name = f"{full_stream_name}_recording"
-                    recording = si.read_zarr(str(zarr_path))
+                    recording = zarr_recordings[str(zarr_path)]
+                    if isinstance(recording, Exception):
+                        raise recording
 
                     # Fix probe information in case of missing names
                     updated_probe = None
@@ -410,7 +460,9 @@ def run() -> None:
                     if "AP" in openephys_stream_name:
                         lf_stream_name = full_stream_name.replace("AP", "LFP")
                         try:
-                            recording_lf = si.read_zarr(str(ecephys_compressed_folder / f"{lf_stream_name}.zarr"))
+                            recording_lf = zarr_recordings[str(ecephys_compressed_folder / f"{lf_stream_name}.zarr")]
+                            if isinstance(recording_lf, Exception):
+                                raise recording_lf
                             if updated_probe is not None:
                                 recording_lf.set_probe(updated_probe, in_place=True)
                             recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
@@ -744,6 +796,18 @@ def run() -> None:
     if len(recording_dict) == 0:
         raise Exception("No recordings found to process after parsing the input folder!")
 
+    # (session, recording) name and segment index -> why its timestamps are unusable, "" if they pass
+    timestamp_issues = {}
+    if not SKIP_TIMESTAMPS_CHECK:
+        segments_to_check = [
+            (session_recording_name, segment_index, rec_segment)
+            for session_recording_name, recording_info in recording_dict.items()
+            for segment_index, rec_segment in enumerate(recording_info["raw"]._recording_segments)
+        ]
+        with ThreadPoolExecutor(MAX_READ_THREADS) as pool:
+            issues = pool.map(lambda segment: check_timestamps(segment[2]), segments_to_check)
+        timestamp_issues = {(name, segment_index): issue for (name, segment_index, _), issue in zip(segments_to_check, issues)}
+
     # populate job dict list
     job_dict_list = []
     logging.info("Recording to be processed in parallel:")
@@ -788,28 +852,11 @@ def run() -> None:
             skip_times = False
             skip_times_msg = ""
             if not SKIP_TIMESTAMPS_CHECK:
-                for segment_index in range(recording.get_num_segments()):
-                    times = recording.get_times(segment_index=segment_index)
-                    times_diff_ms = np.diff(times) * 1000
-                    num_negative_times = np.sum(times_diff_ms < -ACCEPTED_NEGATIVE_DEVIATION_MS)
-
-                    # Check for negative timestamps
-                    if num_negative_times > MAX_NUM_NEGATIVE_TIMESTAMPS:
-                        skip_times_msg = (
-                            f"too many negative timestamps diffs below {ACCEPTED_NEGATIVE_DEVIATION_MS}: {num_negative_times}"
-                        )
-                        skip_times = True
-                        break
-                    # Check for max timestamp gaps
-                    max_time_diff_ms = np.max(np.abs(times_diff_ms))
-                    if max_time_diff_ms > ABS_MAX_TIMESTAMPS_DEVIATION_MS:
-                        skip_times_msg = f"too large time diff deviation: {max_time_diff_ms} ms"
-                        skip_times = True
-                        break
-                    # Check for 0 timestamps diff
-                    num_zero_diffs = np.sum(times_diff_ms == 0)
-                    if num_zero_diffs >= MAX_PERCENT_ZERO_TIMESTAMPS_DIFF * len(times_diff_ms):
-                        skip_times_msg = f"too many zero diffs: {num_zero_diffs}/{len(times_diff_ms)}"
+                # split recordings hold one segment each, in the order of the original's segments
+                segment_indices = [recording_index] if SPLIT_SEGMENTS else range(recording.get_num_segments())
+                for segment_index in segment_indices:
+                    skip_times_msg = timestamp_issues[(session_recording_name, segment_index)]
+                    if skip_times_msg:
                         skip_times = True
                         break
 
