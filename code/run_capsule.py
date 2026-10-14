@@ -339,7 +339,7 @@ def run() -> None:
                         try:
                             recording_lf = si.read_zarr(ecephys_compressed_folder / f"{lf_stream_name}.zarr")
                             if updated_probe is not None:
-                                recording_lf.set_probe(updated_probe, in_place=True)
+                                recording_lf.set_probe(updated_probe)
                             recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
                         except:
                             logging.info(f"\t\tNo LFP stream found for {openephys_stream_name}")
@@ -632,7 +632,7 @@ def run() -> None:
                                 probe_path = probe_paths_session.get(stream_name, None)
                         if probe_path is not None:
                             probegroup = read_probeinterface(probe_path)
-                            recording = recording.set_probegroup(probegroup)
+                            recording.set_probegroup(probegroup)
                         probegroup = recording.get_probegroup()
                         assert probegroup is not None, (
                             f"Probe not specified for {stream_name}. "
