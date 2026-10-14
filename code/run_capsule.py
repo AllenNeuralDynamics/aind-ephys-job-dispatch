@@ -251,7 +251,6 @@ def run() -> None:
 
     logging.info(f"Parsing {INPUT} input folder")
     recording_dict = {}
-    include_annotations = False
     if INPUT == "aind":
         ecephys_session_folders = [
             p for p in data_folder.iterdir() if "ecephys" in p.name.lower() or "behavior" in p.name.lower()
@@ -328,10 +327,7 @@ def run() -> None:
                                 record_node_folder / settings_name,
                                 stream_name=openephys_stream_name
                             )
-                            # TODO: remove in v0.105.0 since probe is dumped in dict by default
-                            recording.set_probe(updated_probe, in_place=True)
-                            # make sure we the updated annotations when dumping the dict!
-                            include_annotations = True
+                            recording.set_probe(updated_probe)
 
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["input_folder"] = ecephys_session_folder
@@ -416,6 +412,9 @@ def run() -> None:
                         recording = se.read_openephys(
                             openephys_folder, load_sync_timestamps=True, stream_name=stream_name, block_index=block_index
                         )
+                        if not recording.has_probe():
+                            logging.info(f"\t\tSkipping {stream_name} - no probe information available!")
+                            continue
                         recording_name = f"{exp_stream_name}_recording"
                         recording_dict[(session_name, recording_name)] = {}
                         recording_dict[(session_name, recording_name)]["input_folder"] = openephys_folder
@@ -796,7 +795,8 @@ def run() -> None:
                     session_name=session_name,
                     recording_name=str(recording_name_group),
                     recording_dict=recording_group.to_dict(
-                        recursive=True, include_annotations=include_annotations, relative_to=data_folder
+                        recursive=True,
+                        relative_to=data_folder
                     ),
                     skip_times=skip_times,
                     duration=duration,
