@@ -171,7 +171,7 @@ def check_timestamps(rec_segment) -> str:
     Reads the time vector in chunks instead of with `get_times()`, which loads the whole vector (8 bytes per sample)
     and keeps it cached on the segment.
     """
-    times = rec_segment.time_vector if rec_segment.time_vector is not None else rec_segment.get_times()
+    times = rec_segment._time_vector if rec_segment.has_time_vector() else rec_segment.get_times()
     num_diffs = len(times) - 1
     num_negative_times = 0
     max_time_diff_ms = 0.0
