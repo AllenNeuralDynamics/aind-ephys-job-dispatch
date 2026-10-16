@@ -39,6 +39,8 @@ The `code/run` script takes several arguments:
                             Which 'loader' to use (aind | spikeglx | openephys | nwb | spikeinterface)
   --multi-session           Whether the data folder includes multiple sessions or not. Default: False
   --min-recording-duration  Minimum duration of the recording in seconds. Recordings shorter than this will be skipped. Default: -1 (no minimum duration)
+  --ecephys-url             Comma-separated URLs (e.g. s3://bucket/session) of AIND sessions to read in place
+                            instead of the data folder. Only used with --input aind. Params key: `ecephys_url`
   --spikeinterface-info     A JSON path or string to specify how to parse the recording in spikeinterface including: 
                             - 1. reader_type (required): string with the reader type (e.g. 'plexon', 'neuralynx', 'intan' etc.).
                             - 2. reader_kwargs (optional): dictionary with the reader kwargs (e.g. {'folder': '/path/to/folder'}).
