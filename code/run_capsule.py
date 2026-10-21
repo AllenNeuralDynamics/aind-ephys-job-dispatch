@@ -305,6 +305,10 @@ def run() -> None:
                     recording_name = f"{full_stream_name}_recording"
                     recording = si.read_zarr(zarr_path)
 
+                    if not recording.has_probe():
+                        logging.info(f"\t\tSkipping {full_stream_name} - no probe information available!")
+                        continue
+
                     # Fix probe information in case of missing names
                     updated_probe = None
                     probes_info = recording.get_annotation("probes_info")
