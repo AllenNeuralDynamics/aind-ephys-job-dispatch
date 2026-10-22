@@ -386,7 +386,7 @@ def run() -> None:
 
     elif INPUT == "openephys":
         # get blocks/experiments and streams info
-        openephys_folders = [p for p in data_folder.iterdir() if p.is_dir()]
+        openephys_folders = sorted({p.parent for p in data_folder.rglob("Record Node*") if p.is_dir()})
         if len(openephys_folders) == 0:
             raise Exception("No valid Open Ephys folder found.")
         elif len(openephys_folders) > 1:
