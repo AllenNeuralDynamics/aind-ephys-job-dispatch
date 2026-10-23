@@ -11,6 +11,7 @@ import warnings
 from pathlib import Path
 import json
 import logging
+from collections import Counter
 
 
 # SPIKEINTERFACE
@@ -289,64 +290,80 @@ def run() -> None:
             zarr_paths = sorted([p for p in ecephys_compressed_folder.iterdir() if p.is_dir() and p.name.endswith(".zarr")])
 
             logging.info(f"\tNum. zarr folders {len(zarr_paths)}")
+            ap_streams = {}
             for zarr_path in zarr_paths:
                 full_stream_name = zarr_path.name.replace(".zarr", "")
                 # stream_name is organized as:
                 # {experiment_name}_{openephys_stream_name}.zarr
                 experiment_name = full_stream_name.split("_")[0]
-                experiment_number = int(experiment_name.replace("experiment", ""))
                 openephys_stream_name = "_".join(full_stream_name.split("_")[1:])
                 is_ap_stream = (
                     "NI-DAQ" not in openephys_stream_name and
-                    "LFP" not in openephys_stream_name and 
+                    "LFP" not in openephys_stream_name and
                     "Rhythm" not in openephys_stream_name
                 )
                 if is_ap_stream:
-                    recording_name = f"{full_stream_name}_recording"
                     recording = si.read_zarr(zarr_path)
-
-                    if not recording.has_probe():
-                        logging.info(f"\t\tSkipping {full_stream_name} - no probe information available!")
-                        continue
-
-                    # Fix probe information in case of missing names
-                    updated_probe = None
                     probes_info = recording.get_annotation("probes_info")
-                    if probes_info is not None and len(probes_info) == 1:
-                        probe_info = probes_info[0]
-                        probe_name = probe_info["name"]
-                        if probe_name == "":
-                            experiment_folder = list(ecephys_openephys_folder.glob(f"**/{experiment_name}/"))[0]
-                            record_node_folder = experiment_folder.parent
-                            
-                            logging.info(
-                                f"\t\tProbe name is missing for {experiment_name} - {openephys_stream_name}! "
-                                "Parsing Open Ephys settings to load up-to-date probe info"
-                            )
-                            if experiment_number == 1:
-                                settings_name = "settings.xml"
-                            else:
-                                settings_name = f"settings_{experiment_number}.xml"
-                            updated_probe = pi.read_openephys(
-                                record_node_folder / settings_name,
-                                stream_name=openephys_stream_name
-                            )
-                            recording.set_probe(updated_probe)
+                    stored_probe_name = (
+                        probes_info[0]["name"] if probes_info is not None and len(probes_info) == 1 else None
+                    )
+                    ap_streams[zarr_path] = (recording, experiment_name, stored_probe_name)
 
-                    recording_dict[(session_name, recording_name)] = {}
-                    recording_dict[(session_name, recording_name)]["input_folder"] = ecephys_session_folder
-                    recording_dict[(session_name, recording_name)]["raw"] = recording
+            # The shanks of a quad base share one custom probe name, which probeinterface<0.3.2 resolved to the
+            # first shank at compression, so a name shared within an experiment is as unusable as a missing one
+            probe_name_counts = Counter(
+                (experiment_name, stored_probe_name) for _, experiment_name, stored_probe_name in ap_streams.values()
+            )
 
-                    # load the associated LF stream (if available)
-                    if "AP" in openephys_stream_name:
-                        lf_stream_name = full_stream_name.replace("AP", "LFP")
-                        try:
-                            recording_lf = si.read_zarr(ecephys_compressed_folder / f"{lf_stream_name}.zarr")
-                            if updated_probe is not None:
-                                recording_lf.set_probe(updated_probe)
-                            recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
-                        except:
-                            logging.info(f"\t\tNo LFP stream found for {openephys_stream_name}")
+            for zarr_path, (recording, experiment_name, probe_name) in ap_streams.items():
+                full_stream_name = zarr_path.name.replace(".zarr", "")
+                experiment_number = int(experiment_name.replace("experiment", ""))
+                openephys_stream_name = "_".join(full_stream_name.split("_")[1:])
+                recording_name = f"{full_stream_name}_recording"
+
+                if not recording.has_probe():
+                    logging.info(f"\t\tSkipping {full_stream_name} - no probe information available!")
+                    continue
+
+                # Fix probe information in case of missing or shared names
+                updated_probe = None
+                if probe_name is not None and (probe_name == "" or probe_name_counts[(experiment_name, probe_name)] > 1):
+                    # each record node keeps its own settings, so look under the stream's node
+                    record_node_glob = f"**/{openephys_stream_name.split('#')[0]}/{experiment_name}/" \
+                        if "#" in openephys_stream_name else f"**/{experiment_name}/"
+                    experiment_folder = list(ecephys_openephys_folder.glob(record_node_glob))[0]
+                    record_node_folder = experiment_folder.parent
+
+                    logging.info(
+                        f"\t\tProbe name is missing or shared for {experiment_name} - {openephys_stream_name}! "
+                        "Parsing Open Ephys settings to load up-to-date probe info"
+                    )
+                    if experiment_number == 1:
+                        settings_name = "settings.xml"
+                    else:
+                        settings_name = f"settings_{experiment_number}.xml"
+                    updated_probe = pi.read_openephys(
+                        record_node_folder / settings_name,
+                        stream_name=openephys_stream_name
+                    )
+                    logging.info(f"\t\tProbe name from settings: {updated_probe.name}")
+                    recording.set_probe(updated_probe)
+
+                recording_dict[(session_name, recording_name)] = {}
+                recording_dict[(session_name, recording_name)]["input_folder"] = ecephys_session_folder
+                recording_dict[(session_name, recording_name)]["raw"] = recording
+
+                # load the associated LF stream (if available)
+                if "AP" in openephys_stream_name:
+                    lf_stream_name = full_stream_name.replace("AP", "LFP")
+                    try:
+                        recording_lf = si.read_zarr(ecephys_compressed_folder / f"{lf_stream_name}.zarr")
+                        if updated_probe is not None:
+                            recording_lf.set_probe(updated_probe)
+                        recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
+                    except:
+                        logging.info(f"\t\tNo LFP stream found for {openephys_stream_name}")
 
     elif INPUT == "spikeglx":
         # get blocks/experiments and streams info
