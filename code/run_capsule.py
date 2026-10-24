@@ -304,10 +304,15 @@ def run() -> None:
                 )
                 if is_ap_stream:
                     recording = si.read_zarr(zarr_path)
+                    # older Zarrs carry no "probes_info" annotation, only the attached probe
                     probes_info = recording.get_annotation("probes_info")
-                    stored_probe_name = (
-                        probes_info[0]["name"] if probes_info is not None and len(probes_info) == 1 else None
-                    )
+                    stored_probes = recording.get_probegroup().probes if recording.has_probe() else []
+                    if probes_info is not None and len(probes_info) == 1:
+                        stored_probe_name = probes_info[0]["name"]
+                    elif len(stored_probes) == 1:
+                        stored_probe_name = stored_probes[0].name
+                    else:
+                        stored_probe_name = None
                     ap_streams[zarr_path] = (recording, experiment_name, stored_probe_name)
 
             # The shanks of a quad base share one custom probe name, which probeinterface<0.3.2 resolved to the
