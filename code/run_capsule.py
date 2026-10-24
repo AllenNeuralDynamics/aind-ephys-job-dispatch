@@ -164,7 +164,7 @@ def run() -> None:
             spikeinterface_info = job_dispatch_params.get("spikeinterface_info")
             assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
         MULTI_SESSION = job_dispatch_params.get("multi_session", False)
-        MIN_RECORDING_DURATION = job_dispatch_params.get("min_recording_duration", -1)
+        MIN_RECORDING_DURATION = float(job_dispatch_params.get("min_recording_duration", -1))
         LOGGING = job_dispatch_params.get("logging", None)
     else:
         # if params is not given, use the arguments
