@@ -35,8 +35,6 @@ PARAMS_FILE = Path("../params.json")
 
 def run() -> None:
     """Entrypoint for the job dispatch capsule."""
-    # args = parser.parse_args()
-
     if PARAMS_FILE.is_file():
         with open(PARAMS_FILE, "r") as f:
             full_params = json.load(f)
