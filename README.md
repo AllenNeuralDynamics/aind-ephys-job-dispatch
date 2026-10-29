@@ -18,7 +18,7 @@ The data ingestion layer supports multiple input formats:
 - `spikeglx`: SpikeGLX generated folder
 - `openephys`: OpenEphys generated folder (Neuropixels plugin required)
 - `nwb`: NWB file (either in HDF5 or Zarr backend)
-- `spikeinterface`: a [spikeinterface-supported format](https://spikeinterface.readthedocs.io/en/latest/modules/extractors.html#raw-data-formats) (provide parsing info with the ``spikeinterface-info`` argument)
+- `spikeinterface`: a [spikeinterface-supported format](https://spikeinterface.readthedocs.io/en/latest/modules/extractors.html#raw-data-formats) (provide parsing info with the ``spikeinterface_info`` parameter)
 - `aind`: data folder created at AIND (e.g., "ecephys_664438_2023-04-12_14-59-51") with the `ecephys` folder containing
   the `ecepys_compressed` and `ecephys_clipped` folders. 
 
@@ -26,26 +26,39 @@ The ecephys data can have multiple experiments (or blocks), each with multiple s
 
 ### Parameters
 
-The `code/run` script takes several arguments:
+Parameters are read from a `params.json` file that must be in the root folder of the capsule (next to `code/`, i.e. `../params.json` from `code/`), with the step parameters in the `job_dispatch` section and the optional `logging` section:
 
-```bash
-  --no-split-segments       Whether to concatenate or split recording segments or not. Default: split segments
-  --no-split-groups         Whether to process different groups separately
-  --debug                   Whether to run in DEBUG mode
-  --debug-duration          Duration of clipped recording in debug mode. Default is 30 seconds. 
-                            Only used if debug is enabled
-  --skip-timestamps-check   Skip timestamps check
-  --input {aind,spikeglx,openephys,nwb,spikeinterface}
-                            Which 'loader' to use (aind | spikeglx | openephys | nwb | spikeinterface)
-  --multi-session           Whether the data folder includes multiple sessions or not. Default: False
-  --min-recording-duration  Minimum duration of the recording in seconds. Recordings shorter than this will be skipped. Default: -1 (no minimum duration)
-  --spikeinterface-info     A JSON path or string to specify how to parse the recording in spikeinterface including: 
-                            - 1. reader_type (required): string with the reader type (e.g. 'plexon', 'neuralynx', 'intan' etc.).
-                            - 2. reader_kwargs (optional): dictionary with the reader kwargs (e.g. {'folder': '/path/to/folder'}).
-                            - 3. keep_stream_substrings (optional): string or list of strings with the stream names to load (e.g. 'AP' or ['AP', 'LFP']).
-                            - 4. skip_stream_substrings (optional): string (or list of strings) with substrings used to skip streams (e.g. 'NIDQ' or ['USB', 'EVENTS']).
-                            - 5. probe_paths (optional): string or dict the probe paths to a ProbeInterface JSON file (e.g. '/path/to/probe.json'). If a dict is provided, the key is the stream name and the value is the probe path. If reader_kwargs is not provided, the reader will be created with default parameters. The probe_path is required if the reader doesn't load the probe automatically.
+```json
+{
+    "logging": {"package": "logging"},
+    "job_dispatch": {
+        "input": "aind",
+        "split_segments": false,
+        "split_groups": true,
+        "debug": false,
+        "debug_duration": 30,
+        "skip_timestamps_check": false,
+        "multi_session": false,
+        "min_recording_duration": -1
+    }
+}
 ```
+
+- `input` (required): which 'loader' to use (`aind` | `spikeglx` | `openephys` | `nwb` | `spikeinterface`)
+- `split_segments`: whether to split (true) or concatenate (false) recording segments. Default: false
+- `split_groups`: whether to process different groups separately. Default: true
+- `debug`: whether to run in DEBUG mode. Default: false
+- `debug_duration`: duration (s) of the clipped recording in debug mode. Only used if `debug` is true
+- `skip_timestamps_check`: skip the timestamps check. Default: false
+- `multi_session`: whether the data folder includes multiple sessions. Default: false
+- `min_recording_duration`: recordings shorter than this (s) are skipped. Default: -1 (no minimum)
+- `nwb_files`: comma-separated paths to NWB files (only for `input="nwb"`). If not set, they are inferred from the data folder
+- `spikeinterface_info` (required for `input="spikeinterface"`): a JSON path or string specifying how to parse the recording in spikeinterface, including:
+  - `reader_type` (required): string with the reader type (e.g. 'plexon', 'neuralynx', 'intan' etc.).
+  - `reader_kwargs` (optional): dictionary with the reader kwargs (e.g. {'folder': '/path/to/folder'}).
+  - `keep_stream_substrings` (optional): string or list of strings with the stream names to load (e.g. 'AP' or ['AP', 'LFP']).
+  - `skip_stream_substrings` (optional): string (or list of strings) with substrings used to skip streams (e.g. 'NIDQ' or ['USB', 'EVENTS']).
+  - `probe_paths` (optional): string or dict with the probe paths to a ProbeInterface JSON file (e.g. '/path/to/probe.json'). If a dict is provided, the key is the stream name and the value is the probe path. The probe path is required if the reader doesn't load the probe automatically.
 
 ### Output
 
