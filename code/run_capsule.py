@@ -21,13 +21,10 @@ from spikeinterface.core.core_tools import SIJsonEncoder
 
 import probeinterface as pi
 
-
-# here we define some constants used for defining if timestamps are ok
-# or should be skipped
-ACCEPTED_NEGATIVE_DEVIATION_MS = 0.2  # we allow for small negative timestamps diff glitches
-MAX_NUM_NEGATIVE_TIMESTAMPS = 10  # maximum number of negative timestamps allowed below the accepted deviation
-ABS_MAX_TIMESTAMPS_DEVIATION_MS = 2  # absolute maximum deviation allowed for timestamps (also positive)
-MAX_PERCENT_ZERO_TIMESTAMPS_DIFF = 0.02  # percent of zero timestamps diff allowes
+DEFAULT_ACCEPTED_NEGATIVE_DEVIATION_MS = 0.2  # we allow for small negative timestamps diff glitches
+DEFAULT_MAX_NUM_NEGATIVE_TIMESTAMPS = 10  # maximum number of negative timestamps allowed below the accepted deviation
+DEFAULT_ABS_MAX_TIMESTAMPS_DEVIATION_MS = 2  # absolute maximum deviation allowed for timestamps (also positive)
+DEFAULT_MAX_PERCENT_ZERO_TIMESTAMPS_DIFF = 0.02  # percent of zero timestamps diff allowes
 
 
 data_folder = Path("../data")
@@ -35,103 +32,6 @@ results_folder = Path("../results")
 
 PARAMS_FILE = Path("../params.json")
 
-
-# # Define argument parser
-# parser = argparse.ArgumentParser(description="Dispatch jobs for AIND ephys pipeline")
-
-# split_segment_group = parser.add_mutually_exclusive_group()
-# split_segment_help = "Whether to concatenate or split recording segments or not. Default: split segments"
-# split_segment_group.add_argument("--no-split-segments", action="store_true", help=split_segment_help)
-# split_segment_group.add_argument("static_split_segments", nargs="?", help=split_segment_help)
-
-# split_group = parser.add_mutually_exclusive_group()
-# split_help = "Whether to process different groups separately. Default: split groups"
-# split_group.add_argument("--no-split-groups", action="store_true", help=split_help)
-# split_group.add_argument("static_split_groups", nargs="?", help=split_help)
-
-# debug_group = parser.add_mutually_exclusive_group()
-# debug_help = "Whether to run in DEBUG mode. Default: False"
-# debug_group.add_argument("--debug", action="store_true", help=debug_help)
-# debug_group.add_argument("static_debug", nargs="?", help=debug_help)
-
-# debug_duration_group = parser.add_mutually_exclusive_group()
-# debug_duration_help = (
-#     "Duration of clipped recording in debug mode. Only used if debug is enabled. Default: 30 seconds"
-# )
-# debug_duration_group.add_argument("--debug-duration", default=30, help=debug_duration_help)
-# debug_duration_group.add_argument("static_debug_duration", nargs="?", default=None, help=debug_duration_help)
-
-# timestamps_skip_group = parser.add_mutually_exclusive_group()
-# timestamps_skip_help = "Skip timestamps check"
-# timestamps_skip_group.add_argument("--skip-timestamps-check", action="store_true", help=timestamps_skip_help)
-# timestamps_skip_group.add_argument(
-#     "static_skip_timestamps_check", nargs="?", help=timestamps_skip_help
-# )
-
-# input_group = parser.add_mutually_exclusive_group()
-# input_help = "Which 'loader' to use (spikeglx | openephys | nwb | spikeinterface | aind)"
-# input_group.add_argument("--input", default=None, help=input_help, choices=["aind", "spikeglx", "openephys", "nwb", "spikeinterface"])
-# input_group.add_argument("static_input", nargs="?", help=input_help)
-
-# min_recording_duration = parser.add_mutually_exclusive_group()
-# min_recording_duration_help = (
-#     "If provided, skips recordings with duration less than this value. If -1 (default), no recordings are skipped"
-# )
-# min_recording_duration.add_argument("--min-recording-duration", default="-1", help=min_recording_duration_help)
-# min_recording_duration.add_argument("static_min_recording_duration", nargs="?", default=None, help=min_recording_duration_help)
-
-# nwb_files_help = (
-#     "Explicitly specified paths (comma-separated) to NWB files to process. "
-#     "Only used if `input='nwb'`. "
-#     "If not specified, these will be inferred from the `data_folder`."
-# )
-# nwb_files_group = parser.add_mutually_exclusive_group()
-# nwb_files_group.add_argument(
-#     "--nwb-files",
-#     default=None,
-#     help=nwb_files_help,
-# )
-# nwb_files_group.add_argument(
-#     "static_nwb_files",
-#     nargs="?",
-#     default=None,
-#     help=nwb_files_help,
-# )
-
-
-# multi_session_group = parser.add_mutually_exclusive_group()
-# multi_session_help = "Whether the data folder includes multiple sessions or not. Default: False"
-# multi_session_group.add_argument("--multi-session", action="store_true", help=multi_session_help)
-# multi_session_group.add_argument("static_multi_session", nargs="?", help=multi_session_help)
-
-# spikeinterface_info_group = parser.add_mutually_exclusive_group()
-# spikeinterface_info_help = """
-#     A JSON path or string to specify how to parse the recording in spikeinterface, including: 
-#     - 1. reader_type (required): string with the reader type (e.g. 'plexon', 'neuralynx', etc.). 
-#                                  Use 'spikeinterface' for inputs that spikeinterface can directly read (binary/zarr folders, JSON files, etc.).
-#     - 2. reader_kwargs (optional): dictionary (or list of dicts for multi-session) with the reader kwargs (e.g. {'folder': '/path/to/folder'}).
-#     - 3. keep_stream_substrings (optional): string or list of strings with the stream names to load (e.g. 'AP' or ['AP', 'LFP']).
-#     - 4. skip_stream_substrings (optional): string (or list of strings) with substrings used to skip streams (e.g. 'NIDQ' or ['USB', 'EVTS']).
-#     - 5. probe_paths (optional): string or dict with the probe paths to a ProbeInterface JSON file (e.g. '/path/to/probe.json'). 
-#                                  If a dict is provided, the key is the stream name and the value is the probe path.
-#                                  If multi-session, a list can be provided with the probe paths for each session.
-#     - 6. session_names (optional): string or list of strings with the session names (e.g. 'session1').
-#     If reader_kwargs is not provided, the reader will be created with default parameters. The probe_path is 
-#     required if the reader doesn't load the probe automatically.
-# """
-# spikeinterface_info_group.add_argument(
-#     "--spikeinterface-info",
-#     default=None,
-#     help=spikeinterface_info_help,
-# )
-# spikeinterface_info_group.add_argument(
-#     "static_spikeinterface_info",
-#     nargs="?",
-#     default=None,
-#     help=spikeinterface_info_help,
-# )
-
-# parser.add_argument("--params", default=None, help="Path to the parameters file or JSON string. If given, it will override all other arguments.")
 
 def run() -> None:
     """Entrypoint for the job dispatch capsule."""
@@ -162,6 +62,22 @@ def run() -> None:
     MULTI_SESSION = job_dispatch_params.get("multi_session", False)
     MIN_RECORDING_DURATION = float(job_dispatch_params.get("min_recording_duration", -1))
 
+    ACCEPTED_NEGATIVE_DEVIATION_MS = job_dispatch_params.get(
+        "accepted_negative_deviation_ms",
+        DEFAULT_ACCEPTED_NEGATIVE_DEVIATION_MS
+    )
+    MAX_NUM_NEGATIVE_TIMESTAMPS = job_dispatch_params.get(
+        "max_num_negative_timestamps",
+        DEFAULT_MAX_NUM_NEGATIVE_TIMESTAMPS
+    )
+    ABS_MAX_TIMESTAMPS_DEVIATION_MS = job_dispatch_params.get(
+        "abs_max_timestamps_deviation_ms",
+        DEFAULT_ABS_MAX_TIMESTAMPS_DEVIATION_MS
+    )
+    MAX_PERCENT_ZERO_TIMESTAMPS_DIFF = job_dispatch_params.get(
+        "max_percent_zero_timestamps_diff",
+        DEFAULT_MAX_PERCENT_ZERO_TIMESTAMPS_DIFF
+    )
 
     # setup AIND logging before any other logging call
     if logging_params is None:
