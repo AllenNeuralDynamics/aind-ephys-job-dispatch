@@ -4,14 +4,13 @@ warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # GENERAL IMPORTS
-import argparse
 import sys
 import numpy as np
 import warnings
 from pathlib import Path
 import json
 import logging
-
+import boto3
 
 # SPIKEINTERFACE
 import spikeinterface as si
@@ -59,6 +58,8 @@ def run() -> None:
         assert spikeinterface_info is not None, "SpikeInterface info is required when using the spikeinterface loader"
     MULTI_SESSION = job_dispatch_params.get("multi_session", False)
     MIN_RECORDING_DURATION = float(job_dispatch_params.get("min_recording_duration", -1))
+    STREAMING = job_dispatch_params.get("streaming", False)
+    pipeline_data_path = job_dispatch_params.get("pipeline_data_path")
 
     ACCEPTED_NEGATIVE_DEVIATION_MS = job_dispatch_params.get(
         "accepted_negative_deviation_ms",
@@ -112,6 +113,7 @@ def run() -> None:
     logging.info(f"\tMULTI SESSION: {MULTI_SESSION}")
     logging.info(f"\tINPUT: {INPUT}")
     logging.info(f"\tMIN_RECORDING_DURATION: {MIN_RECORDING_DURATION}")
+    logging.info(f"\tSTREAMING: {STREAMING}")
     if INPUT == "spikeinterface":
         logging.info(f"\tSPIKEINTERFACE_INFO: {spikeinterface_info}")
 
@@ -134,29 +136,35 @@ def run() -> None:
                 session_name = data_description["name"]
 
             # in the AIND pipeline, the session folder is mapped to
-            ecephys_base_folder = ecephys_session_folder / "ecephys"
+            if STREAMING:
+                logging.info("Streaming mode enabled.")
+                # pipeline_data_path is s3://{bucket}/{session_name}; zarrs are in
+                # {bucket}/{session_name}/ecephys/ecephys_compressed/{stream_name}.zarr
+                assert pipeline_data_path is not None, "pipeline_data_path is required in streaming mode"
 
-            if (ecephys_base_folder / "ecephys_compressed").is_dir():
-                new_format = True
-                ecephys_folder = ecephys_base_folder
+                bucket, session_name = pipeline_data_path.replace("s3://", "").strip("/").split("/")[:2]
+                prefix = f"{session_name}/ecephys/ecephys_compressed/"
+                paginator = boto3.client("s3").get_paginator("list_objects_v2")
+                zarr_paths = sorted(
+                    f"s3://{bucket}/{cp['Prefix'].rstrip('/')}"
+                    for page in paginator.paginate(Bucket=bucket, Prefix=prefix, Delimiter="/")
+                    for cp in page.get("CommonPrefixes", [])
+                    if cp["Prefix"].rstrip("/").endswith(".zarr")
+                )
             else:
-                new_format = False
-                ecephys_folder = ecephys_session_folder
+                ecephys_folder = ecephys_session_folder / "ecephys" / "ecephys_compressed"
 
-            if not (ecephys_folder / "ecephys_compressed").is_dir():
-                raise FileNotFoundError(f"Compressed folder not found in {ecephys_folder}")
-            ecephys_compressed_folder = ecephys_folder / "ecephys_compressed"
-            ecephys_openephys_folder = ecephys_folder / "ecephys_clipped"
+                if not (ecephys_folder / "ecephys_compressed").is_dir():
+                    raise FileNotFoundError(f"Compressed folder not found in {ecephys_folder}")
+                ecephys_compressed_folder = ecephys_folder / "ecephys_compressed"
+                zarr_paths = sorted([p for p in ecephys_compressed_folder.iterdir() if p.is_dir() and p.name.endswith(".zarr")])
 
             logging.info(f"\tSession name: {session_name}")
-            logging.info(f"\tOpen Ephys folder: {str(ecephys_openephys_folder)}")
-            logging.info(f"\tZarr compressed folder: {str(ecephys_compressed_folder)}")
-
-            zarr_paths = sorted([p for p in ecephys_compressed_folder.iterdir() if p.is_dir() and p.name.endswith(".zarr")])
 
             logging.info(f"\tNum. zarr folders {len(zarr_paths)}")
             for zarr_path in zarr_paths:
-                full_stream_name = zarr_path.name.replace(".zarr", "")
+                zarr_path = str(zarr_path) if STREAMING else zarr_path
+                full_stream_name = Path(zarr_path).name.replace(".zarr", "")
                 # stream_name is organized as:
                 # {experiment_name}_{openephys_stream_name}.zarr
                 experiment_name = full_stream_name.split("_")[0]
@@ -175,41 +183,16 @@ def run() -> None:
                         logging.info(f"\t\tSkipping {full_stream_name} - no probe information available!")
                         continue
 
-                    # Fix probe information in case of missing names
-                    updated_probe = None
-                    probes_info = recording.get_annotation("probes_info")
-                    if probes_info is not None and len(probes_info) == 1:
-                        probe_info = probes_info[0]
-                        probe_name = probe_info["name"]
-                        if probe_name == "":
-                            experiment_folder = list(ecephys_openephys_folder.glob(f"**/{experiment_name}/"))[0]
-                            record_node_folder = experiment_folder.parent
-                            
-                            logging.info(
-                                f"\t\tProbe name is missing for {experiment_name} - {openephys_stream_name}! "
-                                "Parsing Open Ephys settings to load up-to-date probe info"
-                            )
-                            if experiment_number == 1:
-                                settings_name = "settings.xml"
-                            else:
-                                settings_name = f"settings_{experiment_number}.xml"
-                            updated_probe = pi.read_openephys(
-                                record_node_folder / settings_name,
-                                stream_name=openephys_stream_name
-                            )
-                            recording.set_probe(updated_probe)
-
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["input_folder"] = ecephys_session_folder
                     recording_dict[(session_name, recording_name)]["raw"] = recording
 
                     # load the associated LF stream (if available)
                     if "AP" in openephys_stream_name:
-                        lf_stream_name = full_stream_name.replace("AP", "LFP")
+                        parent, name = str(zarr_path).rsplit("/", 1)
+                        lf_stream_path = f"{parent}/{name.replace('AP', 'LFP')}"
                         try:
-                            recording_lf = si.read_zarr(ecephys_compressed_folder / f"{lf_stream_name}.zarr")
-                            if updated_probe is not None:
-                                recording_lf.set_probe(updated_probe)
+                            recording_lf = si.read_zarr(lf_stream_path)
                             recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
                         except:
                             logging.info(f"\t\tNo LFP stream found for {openephys_stream_name}")
