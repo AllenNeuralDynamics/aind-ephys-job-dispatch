@@ -169,8 +169,9 @@ def run() -> None:
                 prefix = f"{session_name}/ecephys/ecephys_compressed/"
                 zarr_paths = list_zarr_paths(bucket, prefix)
             else:
-                ecephys_folder = ecephys_session_folder / "ecephys" / "ecephys_compressed"
-
+                ecephys_folder = ecephys_session_folder / "ecephys"
+                if not (ecephys_folder / "ecephys_compressed").is_dir():
+                    ecephys_folder = ecephys_session_folder  # old format, no ecephys/ subfolder
                 if not (ecephys_folder / "ecephys_compressed").is_dir():
                     raise FileNotFoundError(f"Compressed folder not found in {ecephys_folder}")
                 ecephys_compressed_folder = ecephys_folder / "ecephys_compressed"
