@@ -20,14 +20,13 @@ from spikeinterface.core.core_tools import SIJsonEncoder
 import probeinterface as pi
 
 
-import boto3
-from botocore import UNSIGNED
-from botocore.config import Config
-from botocore.exceptions import ClientError, NoCredentialsError
-
-
 def list_zarr_paths(bucket, prefix):
     """List the *.zarr folders under s3://bucket/prefix, trying anonymous access first (like si.read_zarr)."""
+    import boto3
+    from botocore import UNSIGNED
+    from botocore.config import Config
+    from botocore.exceptions import ClientError, NoCredentialsError
+
     errors = []
     for config in (Config(signature_version=UNSIGNED), None):
         try:
@@ -161,10 +160,6 @@ def run() -> None:
 
             # in the AIND pipeline, the session folder is mapped to
             if STREAMING:
-                import boto3
-                from botocore import UNSIGNED
-                from botocore.config import Config
-
                 logging.info("Streaming mode enabled.")
                 # pipeline_data_path is s3://{bucket}/{session_name}; zarrs are in
                 # {bucket}/{session_name}/ecephys/ecephys_compressed/{stream_name}.zarr
