@@ -10,7 +10,6 @@ import warnings
 from pathlib import Path
 import json
 import logging
-import boto3
 
 # SPIKEINTERFACE
 import spikeinterface as si
@@ -19,6 +18,31 @@ import spikeinterface.extractors as se
 from spikeinterface.core.core_tools import SIJsonEncoder
 
 import probeinterface as pi
+
+
+import boto3
+from botocore import UNSIGNED
+from botocore.config import Config
+from botocore.exceptions import ClientError, NoCredentialsError
+
+
+def list_zarr_paths(bucket, prefix):
+    """List the *.zarr folders under s3://bucket/prefix, trying anonymous access first (like si.read_zarr)."""
+    errors = []
+    for config in (Config(signature_version=UNSIGNED), None):
+        try:
+            paginator = boto3.client("s3", config=config).get_paginator("list_objects_v2")
+            return sorted(
+                f"s3://{bucket}/{cp['Prefix'].rstrip('/')}"
+                for page in paginator.paginate(Bucket=bucket, Prefix=prefix, Delimiter="/")
+                for cp in page.get("CommonPrefixes", [])
+                if cp["Prefix"].rstrip("/").endswith(".zarr")
+            )
+        except (ClientError, NoCredentialsError) as e:
+            errors.append(e)
+    raise PermissionError(f"Cannot list s3://{bucket}/{prefix} anonymously or with credentials: {errors}")
+
+
 
 DEFAULT_ACCEPTED_NEGATIVE_DEVIATION_MS = 0.2  # we allow for small negative timestamps diff glitches
 DEFAULT_MAX_NUM_NEGATIVE_TIMESTAMPS = 10  # maximum number of negative timestamps allowed below the accepted deviation
@@ -137,6 +161,10 @@ def run() -> None:
 
             # in the AIND pipeline, the session folder is mapped to
             if STREAMING:
+                import boto3
+                from botocore import UNSIGNED
+                from botocore.config import Config
+
                 logging.info("Streaming mode enabled.")
                 # pipeline_data_path is s3://{bucket}/{session_name}; zarrs are in
                 # {bucket}/{session_name}/ecephys/ecephys_compressed/{stream_name}.zarr
@@ -144,13 +172,7 @@ def run() -> None:
 
                 bucket, session_name = pipeline_data_path.replace("s3://", "").strip("/").split("/")[:2]
                 prefix = f"{session_name}/ecephys/ecephys_compressed/"
-                paginator = boto3.client("s3").get_paginator("list_objects_v2")
-                zarr_paths = sorted(
-                    f"s3://{bucket}/{cp['Prefix'].rstrip('/')}"
-                    for page in paginator.paginate(Bucket=bucket, Prefix=prefix, Delimiter="/")
-                    for cp in page.get("CommonPrefixes", [])
-                    if cp["Prefix"].rstrip("/").endswith(".zarr")
-                )
+                zarr_paths = list_zarr_paths(bucket, prefix)
             else:
                 ecephys_folder = ecephys_session_folder / "ecephys" / "ecephys_compressed"
 
