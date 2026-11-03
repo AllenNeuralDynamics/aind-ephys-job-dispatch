@@ -4,7 +4,6 @@ warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # GENERAL IMPORTS
-import argparse
 import sys
 import numpy as np
 import warnings
@@ -12,25 +11,64 @@ from pathlib import Path
 import json
 import logging
 
+from concurrent.futures import ThreadPoolExecutor
+
 
 # SPIKEINTERFACE
 import spikeinterface as si
 import spikeinterface.extractors as se
-
 from spikeinterface.core.core_tools import SIJsonEncoder
-
 import probeinterface as pi
+
 
 DEFAULT_ACCEPTED_NEGATIVE_DEVIATION_MS = 0.2  # we allow for small negative timestamps diff glitches
 DEFAULT_MAX_NUM_NEGATIVE_TIMESTAMPS = 10  # maximum number of negative timestamps allowed below the accepted deviation
 DEFAULT_ABS_MAX_TIMESTAMPS_DEVIATION_MS = 2  # absolute maximum deviation allowed for timestamps (also positive)
 DEFAULT_MAX_PERCENT_ZERO_TIMESTAMPS_DIFF = 0.02  # percent of zero timestamps diff allowes
 
+# opening zarrs and reading timestamps is I/O-bound, so streams are read concurrently
+MAX_READ_THREADS = 8
+TIMESTAMPS_CHUNK_SIZE = 10_000_000
+
 
 data_folder = Path("../data")
 results_folder = Path("../results")
 
 PARAMS_FILE = Path("../params.json")
+
+
+def check_timestamps(
+    rec_segment,
+    accepted_negative_deviation_ms,
+    max_num_negative_timestamps,
+    abs_max_timestamps_deviation_ms,
+    max_percent_zero_timestamps_diff
+) -> str:
+    """Return why a segment's timestamps are unusable, or "" if they pass.
+
+    Reads the time vector in chunks instead of with `get_times()`, which loads the whole vector (8 bytes per sample)
+    and keeps it cached on the segment.
+    """
+    if not rec_segment.has_time_vector():
+        return ""
+    times = rec_segment._time_vector
+    num_diffs = len(times) - 1
+    num_negative_times = 0
+    max_time_diff_ms = 0.0
+    num_zero_diffs = 0
+    for start in range(0, num_diffs, TIMESTAMPS_CHUNK_SIZE):
+        # one sample of overlap so the diff spans chunk boundaries
+        times_diff_ms = np.diff(np.asarray(times[start : start + TIMESTAMPS_CHUNK_SIZE + 1])) * 1000
+        num_negative_times += int(np.sum(times_diff_ms < -accepted_negative_deviation_ms))
+        max_time_diff_ms = max(max_time_diff_ms, float(np.max(np.abs(times_diff_ms))))
+        num_zero_diffs += int(np.sum(times_diff_ms == 0))
+    if num_negative_times > max_num_negative_timestamps:
+        return f"too many negative timestamps diffs below {accepted_negative_deviation_ms}: {num_negative_times}"
+    if max_time_diff_ms > abs_max_timestamps_deviation_ms:
+        return f"too large time diff deviation: {max_time_diff_ms} ms"
+    if num_zero_diffs >= max_percent_zero_timestamps_diff * num_diffs:
+        return f"too many zero diffs: {num_zero_diffs}/{num_diffs}"
+    return ""
 
 
 def run() -> None:
@@ -541,6 +579,27 @@ def run() -> None:
     if len(recording_dict) == 0:
         raise Exception("No recordings found to process after parsing the input folder!")
 
+    # (session, recording) name and segment index -> why its timestamps are unusable, "" if they pass
+    timestamp_issues = {}
+    if not SKIP_TIMESTAMPS_CHECK:
+        segments_to_check = [
+            (session_recording_name, segment_index, rec_segment)
+            for session_recording_name, recording_info in recording_dict.items()
+            for segment_index, rec_segment in enumerate(recording_info["raw"].segments)
+        ]
+        with ThreadPoolExecutor(MAX_READ_THREADS) as pool:
+            issues = pool.map(
+                lambda segment: check_timestamps(
+                    segment[2],
+                    ACCEPTED_NEGATIVE_DEVIATION_MS,
+                    MAX_NUM_NEGATIVE_TIMESTAMPS,
+                    ABS_MAX_TIMESTAMPS_DEVIATION_MS,
+                    MAX_PERCENT_ZERO_TIMESTAMPS_DIFF 
+                ),
+                segments_to_check
+            )
+        timestamp_issues = {(name, segment_index): issue for (name, segment_index, _), issue in zip(segments_to_check, issues)}
+
     # populate job dict list
     job_dict_list = []
     logging.info("Recording to be processed in parallel:")
@@ -579,6 +638,14 @@ def run() -> None:
             skip_times = False
             skip_times_msg = ""
             if not SKIP_TIMESTAMPS_CHECK:
+                # split recordings hold one segment each, in the order of the original's segments
+                segment_indices = [recording_index] if SPLIT_SEGMENTS else range(recording.get_num_segments())
+                for segment_index in segment_indices:
+                    skip_times_msg = timestamp_issues[(session_recording_name, segment_index)]
+                    if skip_times_msg:
+                        skip_times = True
+                        break
+
                 for segment_index in range(recording.get_num_segments()):
                     times = recording.get_times(segment_index=segment_index)
                     times_diff_ms = np.diff(times) * 1000
