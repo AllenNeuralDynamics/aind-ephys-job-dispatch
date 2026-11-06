@@ -42,6 +42,33 @@ def list_zarr_paths(bucket, prefix):
     raise PermissionError(f"Cannot list s3://{bucket}/{prefix} anonymously or with credentials: {errors}")
 
 
+def update_legacy_probe_name(recording, ecephys_folder, experiment_name, openephys_stream_name):
+    """Update the legacy probe name for the given recording."""
+    updated_probe = None
+    probegroup = recording.get_probegroup()
+    if len(probegroup.probes) == 1:
+        experiment_number = int(experiment_name.replace("experiment", ""))
+        probe = probegroup.probes[0]
+        probe_name = probe.name
+        if probe_name is None or probe_name == "":
+            ecephys_clipped_folder = ecephys_folder / "ecephys_clipped"
+            experiment_folder = list(ecephys_clipped_folder.glob(f"**/{experiment_name}/"))[0]
+            record_node_folder = experiment_folder.parent
+            logging.info(
+                f"\t\tProbe name is missing for {experiment_name} - {openephys_stream_name}! "
+                "Parsing Open Ephys settings to load up-to-date probe info"
+            )
+            if experiment_number == 1:
+                settings_name = "settings.xml"
+            else:
+                settings_name = f"settings_{experiment_number}.xml"
+            updated_probe = pi.read_openephys(
+                record_node_folder / settings_name,
+                stream_name=openephys_stream_name
+            )
+            recording.set_probe(updated_probe)
+    return updated_probe
+
 
 DEFAULT_ACCEPTED_NEGATIVE_DEVIATION_MS = 0.2  # we allow for small negative timestamps diff glitches
 DEFAULT_MAX_NUM_NEGATIVE_TIMESTAMPS = 10  # maximum number of negative timestamps allowed below the accepted deviation
@@ -82,7 +109,7 @@ def run() -> None:
     MULTI_SESSION = job_dispatch_params.get("multi_session", False)
     MIN_RECORDING_DURATION = float(job_dispatch_params.get("min_recording_duration", -1))
     STREAMING = job_dispatch_params.get("streaming", False)
-    pipeline_data_path = job_dispatch_params.get("pipeline_data_path")
+    REMOTE_PATH = job_dispatch_params.get("remote_path")
 
     ACCEPTED_NEGATIVE_DEVIATION_MS = job_dispatch_params.get(
         "accepted_negative_deviation_ms",
@@ -157,28 +184,32 @@ def run() -> None:
             if (ecephys_session_folder / "data_description.json").is_file():
                 data_description = json.load(open(ecephys_session_folder / "data_description.json", "r"))
                 session_name = data_description["name"]
+            ecephys_folder = ecephys_session_folder / "ecephys"
+            if not (ecephys_folder / "ecephys_clipped").is_dir():
+                ecephys_folder = ecephys_session_folder  # old format, no ecephys/ subfolder
+            if not (ecephys_folder / "ecephys_clipped").is_dir():
+                raise FileNotFoundError(f"Clipped folder not found in {ecephys_folder}")
 
-            # in the AIND pipeline, the session folder is mapped to
             if STREAMING:
                 logging.info("Streaming mode enabled.")
-                # pipeline_data_path is s3://{bucket}/{session_name}; zarrs are in
+                # REMOTE_PATH is s3://{bucket}/{session_name}; zarrs are in
                 # {bucket}/{session_name}/ecephys/ecephys_compressed/{stream_name}.zarr
-                assert pipeline_data_path is not None, "pipeline_data_path is required in streaming mode"
+                assert REMOTE_PATH is not None, "remote_path is required in streaming mode"
 
-                bucket, session_name = pipeline_data_path.replace("s3://", "").strip("/").split("/")[:2]
-                prefix = f"{session_name}/ecephys/ecephys_compressed/"
+                bucket, session_name = REMOTE_PATH.replace("s3://", "").strip("/").split("/")[:2]
+                if ecephys_folder != ecephys_session_folder:
+                    prefix = f"{session_name}/ecephys/ecephys_compressed/"
+                else:
+                    # old format, no ecephys/ subfolder
+                    prefix = f"{session_name}/ecephys_compressed/"
                 zarr_paths = list_zarr_paths(bucket, prefix)
             else:
-                ecephys_folder = ecephys_session_folder / "ecephys"
-                if not (ecephys_folder / "ecephys_compressed").is_dir():
-                    ecephys_folder = ecephys_session_folder  # old format, no ecephys/ subfolder
-                if not (ecephys_folder / "ecephys_compressed").is_dir():
-                    raise FileNotFoundError(f"Compressed folder not found in {ecephys_folder}")
                 ecephys_compressed_folder = ecephys_folder / "ecephys_compressed"
                 zarr_paths = sorted([p for p in ecephys_compressed_folder.iterdir() if p.is_dir() and p.name.endswith(".zarr")])
 
             logging.info(f"\tSession name: {session_name}")
-
+            if len(zarr_paths) == 0:
+                raise FileNotFoundError(f"No zarr folders found for session {session_name}")
             logging.info(f"\tNum. zarr folders {len(zarr_paths)}")
             for zarr_path in zarr_paths:
                 zarr_path = str(zarr_path) if STREAMING else zarr_path
@@ -186,7 +217,6 @@ def run() -> None:
                 # stream_name is organized as:
                 # {experiment_name}_{openephys_stream_name}.zarr
                 experiment_name = full_stream_name.split("_")[0]
-                experiment_number = int(experiment_name.replace("experiment", ""))
                 openephys_stream_name = "_".join(full_stream_name.split("_")[1:])
                 is_ap_stream = (
                     "NI-DAQ" not in openephys_stream_name and
@@ -201,6 +231,14 @@ def run() -> None:
                         logging.info(f"\t\tSkipping {full_stream_name} - no probe information available!")
                         continue
 
+                    # Fix legacy assets with missing probe information in case of missing names
+                    updated_probe = update_legacy_probe_name(
+                        recording,
+                        ecephys_folder,
+                        experiment_name,
+                        openephys_stream_name
+                    )
+
                     recording_dict[(session_name, recording_name)] = {}
                     recording_dict[(session_name, recording_name)]["input_folder"] = ecephys_session_folder
                     recording_dict[(session_name, recording_name)]["raw"] = recording
@@ -211,6 +249,8 @@ def run() -> None:
                         lf_stream_path = f"{parent}/{name.replace('AP', 'LFP')}"
                         try:
                             recording_lf = si.read_zarr(lf_stream_path)
+                            if updated_probe is not None:
+                                recording_lf.set_probe(updated_probe)
                             recording_dict[(session_name, recording_name)]["lfp"] = recording_lf
                         except:
                             logging.info(f"\t\tNo LFP stream found for {openephys_stream_name}")
